@@ -1,40 +1,7 @@
-stages:
-    - build
+include:
+    - project: bp3d/cargo-gitlab
+      file: base-template.yml
 
-#------------------#
-#  Debug pipeline  #
-#------------------#
-.build-script:
-    stage: build
-    script:
-        - startsection build "Build & test"
-        - cargo build
-        - cargo test
-        - endsection build
-
-build-linux:
-    stage: build
-    except:
-        - master
-    image: "rust:latest"
-    extends:
-        - .build-script
-    before_script:
-        - . ./.gitlab/support/unix.sh
-
-build-win64:
-    stage: build
-    except:
-        - master
-    tags:
-        - windows
-        - shared-windows
-        - windows-1809
-    before_script:
-        - . ./.gitlab/support/windows.ps1
-        - startsection deps "Install job dependencies"
-        - choco install -y rust-ms
-        - endsection deps
-    extends:
-        - .build-script
-
+variables:
+    CRATE_NAME: test
+    PROJECT_NAME: Test
