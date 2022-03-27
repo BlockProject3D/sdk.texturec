@@ -1,11 +1,11 @@
 [package]
-name = "test"
+name = "texturec"
 version = "0.1.0"
 authors = ["Yuri Edward <yuri6037@outlook.com>"]
-edition = "2018"
+edition = "2021"
 description = ""
 license = "BSD-3-Clause"
-repository = "https://gitlab.com/bp3d/test"
+repository = "https://gitlab.com/bp3d/sdk/texture-compiler"
 readme = "./README.MD"
 keywords = []
 categories = []
@@ -13,6 +13,17 @@ categories = []
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-
-[features]
-
+image = "0.24.1"
+bp3d-lua = { path = "../lua", features = ["vector", "math"] }
+toml = "0.5.8"
+serde = { version = "1.0.136", features = ["derive"] }
+bp3d-threads = "1.1.0"
+clap = "3.1.6"
+thiserror = "1.0.30"
+nalgebra = "0.30.1"
+os_str_bytes = "6.0.0"
+bstr = "0.2.17"
+log = "0.4.16"
+bp3d-logger = "1.0.0"
+byteorder = "1.4.3"
+rlua = "0.19.1"

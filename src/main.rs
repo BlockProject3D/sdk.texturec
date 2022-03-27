@@ -1,4 +1,4 @@
-// Copyright (c) 2021, BlockProject 3D
+// Copyright (c) 2022, BlockProject 3D
 //
 // All rights reserved.
 //
@@ -26,3 +26,85 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::path::Path;
+use clap::{Arg, Command};
+use crate::swapchain::SwapChain;
+
+mod template;
+mod math;
+mod params;
+mod texture;
+mod swapchain;
+mod pipeline;
+mod lua;
+
+const PROG_NAME: &str = env!("CARGO_PKG_NAME");
+const PROG_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+macro_rules! etry {
+    (($msg: literal $status: literal) => $code: expr) => {
+        match $code {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("{}: {}", $msg, e);
+                return $status;
+            }
+        }
+    };
+}
+
+fn run() -> i32 {
+    let matches = Command::new(PROG_NAME)
+        .author("BlockProject 3D")
+        .about("BlockProject 3D SDK - Shader Compiler")
+        .version(PROG_VERSION)
+        .args([
+            Arg::new("verbose").short('v').long("verbose").multiple_occurrences(true)
+                .help("Enable verbose output"),
+            Arg::new("debug").short('d').long("debug")
+                .help("Enable debug PNG output"),
+            Arg::new("template").short('t').long("--template").allow_invalid_utf8(true).takes_value(true).required(true)
+                .help("Specify the texture template"),
+            Arg::new("output").short('o').long("output").takes_value(true)
+                .allow_invalid_utf8(true).help("Output texture file name"),
+            Arg::new("threads").short('n').long("threads").takes_value(true)
+                .help("Specify the maximum number of threads to use when processing shaders"),
+            Arg::new("width").long("width").takes_value(true)
+                .help("Override output texture width"),
+            Arg::new("height").long("height").takes_value(true)
+                .help("Override output texture height"),
+            Arg::new("parameter").short('p').long("parameter").takes_value(true).multiple_occurrences(true).allow_invalid_utf8(true)
+                .help("Specify a template parameter using the syntax <parameter name>=<parameter value>")
+        ]).get_matches();
+    let template_path = matches.value_of_os("template").map(Path::new).unwrap();
+    let template = etry!(("failed to load template" 1) =>
+        template::Template::load(template_path));
+    let params = etry!(("failed to parse parameters" 1) =>
+        params::Parameters::parse(&template, matches.values_of_os("parameter")));
+    let width: u32 = matches.value_of_t("width")
+        .or_else(|_| template.try_width_from_base_texture(&params).ok_or(()))
+        .unwrap_or(template.default_width);
+    let height: u32 = matches.value_of_t("height")
+        .or_else(|_| template.try_height_from_base_texture(&params).ok_or(()))
+        .unwrap_or(template.default_height);
+    let chain = SwapChain::new(width, height, template.format);
+    let scripts = etry!(("failed to load pipeline scripts" 1) =>
+        template.load_scripts(template_path.parent().unwrap_or(Path::new("."))));
+    let pass_count = scripts.len();
+    let mut pipeline  = pipeline::Pipeline::new(scripts, params, chain, matches.value_of_t("threads").unwrap_or(1));
+    for _ in 0..pass_count {
+        etry!(("failed to run pass" 1) => pipeline.next_pass());
+    }
+    let render_target = pipeline.finish();
+    if matches.is_present("debug") {
+
+    }
+    //TODO: Mipmaps
+    //TODO: Actual BPX save
+    0
+}
+
+fn main() {
+    let code = bp3d_logger::Logger::new().add_file("bp3d-sdk").add_stdout().run(run);
+    std::process::exit(code);
+}
