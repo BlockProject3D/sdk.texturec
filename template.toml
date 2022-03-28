@@ -1,0 +1,21 @@
+# Default output texture width.
+default-width = 256
+
+# Default output texture height.
+default-height = 256
+
+# Base texture parameter to auto-detect the output texture size.
+base-texture = "base"
+
+# Output texture format.
+format = "RGBA8"
+
+# Mipmap count.
+mipmaps = 0 # 0 = diabled.
+
+# List of lua scripts to run, in order, before saving the output texture BPX.
+pipeline = ["test"]
+
+# Template parameters.
+[parameters]
+base = "Texture"
