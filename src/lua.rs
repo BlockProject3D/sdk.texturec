@@ -31,12 +31,19 @@ use bp3d_lua::LuaEngine;
 use bp3d_lua::number::{Checked, Int, NumToLua};
 use bp3d_lua::vector::{LuaVec2, LuaVec3, LuaVec4};
 use nalgebra::{Point2, Vector4};
-use rlua::{Context, Error, FromLua, FromLuaMulti, ToLua, ToLuaMulti, UserData, UserDataMethods, Value};
+use rlua::{Context, Error, FromLua, FromLuaMulti, Table, ToLua, ToLuaMulti, UserData, UserDataMethods, Value};
 use rlua::prelude::{LuaMultiValue, LuaString};
 use crate::math::Vec4f;
 use crate::params::{Parameter, SharedParameters};
 use crate::template::Format;
 use crate::texture::{Texel, Texture};
+
+pub const GLOBAL_PARAMETERS: &str = "Parameters";
+pub const GLOBAL_PREVIOUS: &str = "Previous";
+pub const GLOBAL_BUFFER: &str = "Buffer";
+pub const BUFFER_FORMAT: &str = "format";
+pub const BUFFER_WIDTH: &str = "width";
+pub const BUFFER_HEIGHT: &str = "height";
 
 impl<'lua> ToLua<'lua> for Format {
     fn to_lua(self, lua: Context<'lua>) -> rlua::Result<Value<'lua>> {
@@ -127,7 +134,8 @@ impl LuaOutTexel {
 
 impl<'lua> FromLuaMulti<'lua> for LuaOutTexel {
     fn from_lua_multi(values: LuaMultiValue<'lua>, lua: Context<'lua>) -> rlua::Result<Self> {
-        let format: Format = lua.globals().raw_get("Format")?;
+        let table: Table = lua.globals().get(GLOBAL_BUFFER)?;
+        let format: Format = table.raw_get(BUFFER_FORMAT)?;
         Ok(LuaOutTexel(match format {
             Format::L8 => {
                 ensure_value_count(values.len(), &[1])?;

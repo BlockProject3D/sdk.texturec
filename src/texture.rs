@@ -210,7 +210,38 @@ impl OutputTexture {
         }
     }
 
-    //TODO: to_rgba -> image::RgbaImage.
+    fn assume_rgba_compat(&self) -> RgbaImage {
+        let mut image = RgbaImage::new(self.width, self.height);
+        image.enumerate_pixels_mut().for_each(|(x, y, v)| {
+            let (r, g, b, a) = self.get(Point2::new(x, y)).unwrap().rgba().unwrap();
+            v[0] = r;
+            v[1] = g;
+            v[2] = b;
+            v[3] = a;
+        });
+        image
+    }
+
+    /// Performs a potentially lossy conversion to an 8 bits RGBA image.
+    pub fn to_rgba_lossy(self) -> RgbaImage {
+        match self.format {
+            Format::L8 => self.assume_rgba_compat(),
+            Format::LA8 => self.assume_rgba_compat(),
+            Format::RGBA8 => RgbaImage::from_raw(self.width, self.height, self.data.to_vec()).unwrap(),
+            Format::RGBAF32 => {
+                let mut image = RgbaImage::new(self.width, self.height);
+                image.enumerate_pixels_mut().for_each(|(x, y, v)| {
+                    let vec = self.get(Point2::new(x, y)).unwrap().normalize().map(|v| v as u8);
+                    v[0] = vec.x;
+                    v[1] = vec.y;
+                    v[2] = vec.z;
+                    v[3] = vec.w;
+                });
+                image
+            },
+            Format::F32 => RgbaImage::from_raw(self.width, self.height, self.data.to_vec()).unwrap()
+        }
+    }
 }
 
 impl Texture for OutputTexture {

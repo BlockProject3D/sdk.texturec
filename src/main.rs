@@ -28,6 +28,7 @@
 
 use std::path::Path;
 use clap::{Arg, Command};
+use log::{info, LevelFilter};
 use crate::swapchain::SwapChain;
 
 mod template;
@@ -50,6 +51,16 @@ macro_rules! etry {
                 return $status;
             }
         }
+    };
+}
+
+fn alloc_verbosity_level(verbosity: u64) {
+    match verbosity {
+        0 => log::set_max_level(LevelFilter::Error),
+        1 => log::set_max_level(LevelFilter::Warn),
+        2 => log::set_max_level(LevelFilter::Info),
+        3 => log::set_max_level(LevelFilter::Debug),
+        _ => log::set_max_level(LevelFilter::Trace),
     };
 }
 
@@ -76,7 +87,9 @@ fn run() -> i32 {
             Arg::new("parameter").short('p').long("parameter").takes_value(true).multiple_occurrences(true).allow_invalid_utf8(true)
                 .help("Specify a template parameter using the syntax <parameter name>=<parameter value>")
         ]).get_matches();
+    alloc_verbosity_level(matches.occurrences_of("verbose"));
     let template_path = matches.value_of_os("template").map(Path::new).unwrap();
+    info!("Loading template '{:?}'...", template_path);
     let template = etry!(("failed to load template" 1) =>
         template::Template::load(template_path));
     let params = etry!(("failed to parse parameters" 1) =>
@@ -87,7 +100,9 @@ fn run() -> i32 {
     let height: u32 = matches.value_of_t("height")
         .or_else(|_| template.try_height_from_base_texture(&params).ok_or(()))
         .unwrap_or(template.default_height);
+    info!("Creating new swap chain...");
     let chain = SwapChain::new(width, height, template.format);
+    info!("Loading scripts...");
     let scripts = etry!(("failed to load pipeline scripts" 1) =>
         template.load_scripts(template_path.parent().unwrap_or(Path::new("."))));
     let pass_count = scripts.len();
@@ -97,7 +112,8 @@ fn run() -> i32 {
     }
     let render_target = pipeline.finish();
     if matches.is_present("debug") {
-
+        info!("Writing debug output image...");
+        etry!(("failed to save debug image" 1) => render_target.to_rgba_lossy().save("debug.png"));
     }
     //TODO: Mipmaps
     //TODO: Actual BPX save

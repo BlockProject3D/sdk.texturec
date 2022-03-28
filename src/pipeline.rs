@@ -27,17 +27,21 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 use bp3d_lua::LuaEngine;
 use bp3d_lua::math::LibMath;
+use bp3d_lua::number::Checked;
 use bp3d_lua::vector::LibVector;
 use bp3d_threads::{ThreadPool, UnscopedThreadManager};
 use log::{info, warn};
 use nalgebra::Point2;
 use rlua::Function;
-use crate::lua::{Lib, LuaOutTexel, LuaParameters, LuaTexture};
+use crate::lua::{GLOBAL_BUFFER, BUFFER_FORMAT, BUFFER_WIDTH, BUFFER_HEIGHT, GLOBAL_PREVIOUS, GLOBAL_PARAMETERS, Lib, LuaOutTexel, LuaParameters, LuaTexture};
 use crate::params::{Parameters, SharedParameters};
 use crate::SwapChain;
 use crate::texture::{OutputTexture, Texel};
+
+const DISPLAY_INTERVAL: u32 = 8192;
 
 pub struct Pipeline {
     scripts: Vec<Arc<[u8]>>,
@@ -46,6 +50,8 @@ pub struct Pipeline {
     swap_chain: SwapChain,
     n_threads: usize
 }
+
+static PROCESSED_TEXELS: AtomicU32 = AtomicU32::new(0);
 
 impl Pipeline {
     pub fn new(scripts: Vec<Arc<[u8]>>, parameters: Parameters, swap_chain: SwapChain, n_threads: usize) -> Pipeline {
@@ -66,12 +72,17 @@ impl Pipeline {
         let mut pool: ThreadPool<UnscopedThreadManager, rlua::Result<(Point2<u32>, Texel)>> = ThreadPool::new(self.n_threads);
         let manager = UnscopedThreadManager::new();
         info!("Initialized thread pool with {} max thread(s)", self.n_threads);
+        //At this point we don't yet have threads so use relaxed ordering.
+        PROCESSED_TEXELS.store(0, Ordering::Relaxed);
+        let total = self.swap_chain.height() * self.swap_chain.width();
         for y in 0..self.swap_chain.height() {
             for x in 0..self.swap_chain.width() {
                 let script_code = self.scripts[self.cur_pass].clone();
                 let previous = previous.clone();
                 let parameters = self.parameters.clone();
                 let format = self.swap_chain.format();
+                let width = self.swap_chain.width();
+                let height = self.swap_chain.height();
                 pool.send(&manager, move |_| {
                     let engine = LuaEngine::new()?;
                     engine.load_format()?;
@@ -80,18 +91,35 @@ impl Pipeline {
                     engine.load_vec3()?;
                     engine.load_vec4()?;
                     if let Some(prev) = previous {
-                        engine.context(|ctx| ctx.globals().set("BUFFER", LuaTexture::new(prev)))?;
+                        engine.context(|ctx| ctx.globals().set(GLOBAL_PREVIOUS, LuaTexture::new(prev)))?;
                     }
                     engine.context(|ctx| {
                         let globals = ctx.globals();
-                        globals.set("FORMAT", format)?;
-                        globals.set("PARAMETERS", LuaParameters::new(parameters))?;
+                        let table = ctx.create_table()?;
+                        table.raw_set(BUFFER_FORMAT, format)?;
+                        table.raw_set(BUFFER_WIDTH, Checked(width))?;
+                        table.raw_set(BUFFER_HEIGHT, Checked(height))?;
+                        globals.set(GLOBAL_BUFFER, table)?;
+                        globals.set(GLOBAL_PARAMETERS, LuaParameters::new(parameters))?;
                         ctx.load(&script_code).exec()
                     })?;
-                    engine.context(|ctx| {
+                    let res = engine.context(|ctx| {
                         let main: Function = ctx.globals().get("main")?;
                         main.call((x, y))
-                    }).map(|v: LuaOutTexel| v.into_inner()).map(|v| (Point2::new(x, y), v))
+                    }).map(|v: LuaOutTexel| v.into_inner()).map(|v| (Point2::new(x, y), v));
+                    match res {
+                        Ok(v) => {
+                            let current = PROCESSED_TEXELS.fetch_add(1, Ordering::Relaxed);
+                            if current % DISPLAY_INTERVAL == 0 {
+                                info!("{:.2}% done...", (current as f64 / total as f64) * 100.0);
+                            }
+                            Ok(v)
+                        },
+                        Err(e) => {
+                            warn!("script error: {}", e);
+                            Err(e)
+                        }
+                    }
                 });
             }
         }

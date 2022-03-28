@@ -32,6 +32,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
+use log::{debug, info};
 use thiserror::Error;
 use crate::texture::Texture;
 
@@ -83,6 +84,7 @@ pub enum Type {
 pub type Parameters = HashMap<String, Type>;
 
 #[derive(Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct Template {
     /// Default output texture width.
     pub default_width: u32,
@@ -138,9 +140,11 @@ impl Template {
 
     /// Consumes and loads pipeline scripts.
     pub fn load_scripts(self, base_folder: &Path) -> std::io::Result<Vec<Arc<[u8]>>> {
+        debug!("Base template folder: {:?}", base_folder);
         let mut res = Vec::new();
         for script_name in self.pipeline {
             let script_path = base_folder.join(script_name + ".lua");
+            info!("Loading script file {:?}", script_path);
             let mut v = Vec::new();
             File::open(script_path)?.read_to_end(&mut v)?;
             res.push(v.into());
