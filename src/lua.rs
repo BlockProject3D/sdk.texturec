@@ -27,7 +27,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::sync::Arc;
-use bp3d_lua::LuaEngine;
+use bp3d_lua::{LuaEngine, ValueExt};
 use bp3d_lua::number::{Checked, Int, NumToLua};
 use bp3d_lua::vector::{LuaVec2, LuaVec3, LuaVec4};
 use nalgebra::{Point2, Vector4};
@@ -134,6 +134,11 @@ impl LuaOutTexel {
 
 impl<'lua> FromLuaMulti<'lua> for LuaOutTexel {
     fn from_lua_multi(values: LuaMultiValue<'lua>, lua: Context<'lua>) -> rlua::Result<Self> {
+        if values.len() == 1 {
+            if let Ok(texel) = values.iter().nth(0).map(|v| v.check_userdata::<LuaTexel>()).unwrap() {
+                return Ok(LuaOutTexel(texel.0));
+            }
+        }
         let table: Table = lua.globals().get(GLOBAL_BUFFER)?;
         let format: Format = table.raw_get(BUFFER_FORMAT)?;
         Ok(LuaOutTexel(match format {
