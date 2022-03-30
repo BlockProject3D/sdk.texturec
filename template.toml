@@ -14,7 +14,7 @@ format = "RGBA8"
 mipmaps = 0 # 0 = diabled.
 
 # List of lua scripts to run, in order, before saving the output texture BPX.
-pipeline = ["test"]
+pipeline = ["base-scripts/rescale"]
 
 # Template parameters.
 [parameters]

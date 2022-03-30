@@ -41,12 +41,14 @@ local function convert(texel, from, to)
     return CONVERSIONS[to](texel)
 end
 
+local texture = Parameters:get("base")
+local size = Vec2(Buffer.width, Buffer.height)
+
 function main(x, y)
-    local texture = Parameters:get("base");
     if (texture:width() == Buffer.width and texture:height() == Buffer.height) then
         return convert(texture:get(x, y))
     else
-        local pos = Vec2(x, y) / Vec2(Buffer.width, Buffer.height)
+        local pos = Vec2(x, y) / size
         return convert(texture:sample(pos))
     end
 end
