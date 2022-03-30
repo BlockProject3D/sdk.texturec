@@ -89,7 +89,7 @@ fn run() -> i32 {
         ]).get_matches();
     alloc_verbosity_level(matches.occurrences_of("verbose"));
     let template_path = matches.value_of_os("template").map(Path::new).unwrap();
-    info!("Loading template '{:?}'...", template_path);
+    info!("Loading template {:?}...", template_path);
     let template = etry!(("failed to load template" 1) =>
         template::Template::load(template_path));
     let params = etry!(("failed to parse parameters" 1) =>
