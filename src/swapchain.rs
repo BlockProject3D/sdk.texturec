@@ -40,7 +40,15 @@ pub struct SwapChain {
 }
 
 impl SwapChain {
-    pub fn new(width: u32, height: u32, format: Format) -> SwapChain {
+    pub fn new(mut width: u32, mut height: u32, format: Format) -> SwapChain {
+        // Enforce texture is a power of two to pre-align on a majority of graphics hardware
+        // and avoid bugs on some OpenGL implementations.
+        if !width.is_power_of_two() {
+            width = width.next_power_of_two();
+        }
+        if !height.is_power_of_two() {
+            height = height.next_power_of_two();
+        }
         SwapChain {
             chain: [None, None],
             index: 0,
