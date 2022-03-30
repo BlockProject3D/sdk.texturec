@@ -26,6 +26,7 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::io::Write;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use bp3d_lua::LuaEngine;
@@ -45,6 +46,13 @@ use crate::texture::{OutputTexture, Texel};
 
 const DISPLAY_INTERVAL: u32 = 8192;
 
+fn print_progress(progress: f64) {
+    let useless = std::io::stdout();
+    let mut lock = useless.lock();
+    write!(lock, "\r{:.2}% done...", progress).unwrap();
+    lock.flush().unwrap();
+}
+
 struct Task {
     script_code: Arc<[u8]>,
     previous: Option<Arc<OutputTexture>>,
@@ -52,8 +60,7 @@ struct Task {
     format: Format,
     width: u32,
     height: u32,
-    vms: Arc<ArrayQueue<LuaEngine>>,
-    total: f64
+    vms: Arc<ArrayQueue<LuaEngine>>
 }
 
 impl Task {
@@ -85,8 +92,7 @@ impl Task {
         }
     }
 
-    fn run(self, x: u32, y: u32) -> rlua::Result<(Point2<u32>, Texel)> {
-        let total = self.total;
+    fn run(self, x: u32, y: u32, total: f64, intty: bool) -> rlua::Result<(Point2<u32>, Texel)> {
         let (vms, engine) = self.init_lua_engine()?;
         let res = engine.context(|ctx| {
             let main: Function = ctx.globals().get("main")?;
@@ -96,8 +102,8 @@ impl Task {
         match res {
             Ok(v) => {
                 let current = PROCESSED_TEXELS.fetch_add(1, Ordering::Relaxed);
-                if current % DISPLAY_INTERVAL == 0 {
-                    info!("{:.2}% done...", (current as f64 / total as f64) * 100.0);
+                if intty && current % DISPLAY_INTERVAL == 0 {
+                    print_progress((current as f64 / total as f64) * 100.0);
                 }
                 Ok(v)
             },
@@ -142,6 +148,11 @@ impl Pipeline {
         PROCESSED_TEXELS.store(0, Ordering::Relaxed);
         let total = self.swap_chain.height() * self.swap_chain.width();
         let vms = Arc::new(ArrayQueue::new(self.n_threads));
+        let intty = atty::is(atty::Stream::Stdout);
+        if intty {
+            log::logger().flush();
+            print!("0% done...");
+        }
         for y in 0..self.swap_chain.height() {
             for x in 0..self.swap_chain.width() {
                 let task = Task {
@@ -151,10 +162,9 @@ impl Pipeline {
                     format: self.swap_chain.format(),
                     width: self.swap_chain.width(),
                     height: self.swap_chain.height(),
-                    vms: vms.clone(),
-                    total: total as f64
+                    vms: vms.clone()
                 };
-                pool.send(&manager, move |_| task.run(x, y));
+                pool.send(&manager, move |_| task.run(x, y, total as _, intty));
             }
         }
         for task in pool.reduce().map(|v| v.unwrap()) {
