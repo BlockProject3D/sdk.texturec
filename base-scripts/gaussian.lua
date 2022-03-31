@@ -26,57 +26,38 @@
 -- NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 -- SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-local CONVERSION_NAMES = {
-    [format.L8] = "L8",
-    [format.LA8] = "LA8",
-    [format.RGBA8] = "RGBA8",
-    [format.RGBAF32] = "RGBAF32",
-    [format.F32] = "F32"
-}
+-- The sigma parameter.
+local sigma = Parameters:get("sigma")
+if sigma == nil then sigma = 1.5 end
 
-local function rgbaOrError(texel, format)
-    local r, g, b, a = texel:rgba()
-    if (r == nil) then
-        error("Conversion from floats to " .. CONVERSION_NAMES[format] .. " is not supported.")
-    end
-    return r, g, b, a
+-- The kernel size.
+local ksize = Parameters:get("ksize")
+if ksize == nil then ksize = 3 end
+
+if Buffer.width ~= Previous:width() or Buffer.height ~= Previous:height() then
+    error("This script only runs as post process from previous buffer to new buffer")
 end
 
-local CONVERSIONS = {
-    [format.L8] = function(texel)
-        local r, _ = rgbaOrError(texel, format.L8)
-        return r
-    end,
-    [format.LA8] = function(texel)
-        local r, _, _, a = rgbaOrError(texel, format.LA8)
-        return r, a
-    end,
-    [format.RGBA8] = function(texel)
-        return rgbaOrError(texel, format.RGBA8)
-    end,
-    [format.RGBAF32] = function(texel)
-        return texel:normalize()
-    end,
-    [format.F32] = function(texel)
-        return texel:normalize().r
-    end
-}
-
-local function convert(texel, from, to)
-    if (from == to) then
-        return texel
-    end
-    return CONVERSIONS[to](texel)
-end
-
-local texture = Parameters:get("base")
-local size = Vec2(Buffer.width, Buffer.height)
+local W = Buffer.width
+local H = Buffer.height
 
 function main(x, y)
-    if (texture:width() == Buffer.width and texture:height() == Buffer.height) then
-        return convert(texture:get(x, y))
-    else
-        local pos = Vec2(x, y) / size
-        return convert(texture:sample(pos))
+    local gsigma = Vec3(0)
+    local w = 0
+    local p = Vec2(x, y)
+    for i = -ksize, ksize - 1 do
+        for j = -ksize, ksize - 1 do
+            local q = Vec2(math.clamp(x + j, 0, W - 1), math.clamp(y + i, 0, H - 1))
+            local norm = (p - q):normSquared()
+            local kernel = math.gaussian2d(sigma, norm)
+            local r, g, b = Previous:get(math.int(q.x), math.int(q.y)):rgba();
+            gsigma = gsigma + (Vec3(r, g, b) * Vec3(kernel))
+            w = w + kernel
+        end
     end
+    local rgb = gsigma / Vec3(w)
+    local r = math.int(rgb.x)
+    local g = math.int(rgb.y)
+    local b = math.int(rgb.z)
+    return r, g, b
 end
