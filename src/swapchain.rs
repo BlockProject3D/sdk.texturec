@@ -84,10 +84,10 @@ impl SwapChain {
 
     /// Puts an used texture back into the chain.
     pub fn put_back(&mut self, texture: OutputTexture) {
-        let mut next_index = self.index + 1;
-        if next_index >= SWAP_CHAIN_LEN {
-            next_index = 0;
+        if self.index >= SWAP_CHAIN_LEN {
+            self.index = 0;
         }
-        self.chain[next_index] = Some(texture);
+        self.chain[self.index] = Some(texture);
+        self.index += 1;
     }
 }

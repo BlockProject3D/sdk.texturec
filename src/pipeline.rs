@@ -139,46 +139,48 @@ impl Pipeline {
     pub fn next_pass(&mut self) -> rlua::Result<()> {
         assert!(self.cur_pass < self.scripts.len()); //Make sure we're not gonna jump into a
         // non-existent pass
-        let previous = if self.cur_pass == 0 { None } else { Some(self.swap_chain.next()) }.map(Arc::new);
         let mut render_target = self.swap_chain.next();
+        let previous = if self.cur_pass == 0 { None } else { Some(self.swap_chain.next()) }.map(Arc::new);
         let mut pool: ThreadPool<UnscopedThreadManager, rlua::Result<(Point2<u32>, Texel)>> = ThreadPool::new(self.n_threads);
         let manager = UnscopedThreadManager::new();
         info!("Initialized thread pool with {} max thread(s)", self.n_threads);
         //At this point we don't yet have threads so use relaxed ordering.
         PROCESSED_TEXELS.store(0, Ordering::Relaxed);
-        let total = self.swap_chain.height() * self.swap_chain.width();
-        let vms = Arc::new(ArrayQueue::new(self.n_threads));
-        let intty = atty::is(atty::Stream::Stdout);
-        if intty {
-            log::logger().flush();
-            print!("0% done...");
-        }
-        for y in 0..self.swap_chain.height() {
-            for x in 0..self.swap_chain.width() {
-                let task = Task {
-                    script_code: self.scripts[self.cur_pass].clone(),
-                    previous: previous.clone(),
-                    parameters: self.parameters.clone(),
-                    format: self.swap_chain.format(),
-                    width: self.swap_chain.width(),
-                    height: self.swap_chain.height(),
-                    vms: vms.clone()
-                };
-                pool.send(&manager, move |_| task.run(x, y, total as _, intty));
+        {
+            let total = self.swap_chain.height() * self.swap_chain.width();
+            let vms = Arc::new(ArrayQueue::new(self.n_threads));
+            let intty = atty::is(atty::Stream::Stdout);
+            if intty {
+                log::logger().flush();
+                print!("0% done...");
             }
-        }
-        for task in pool.reduce().map(|v| v.unwrap()) {
-            let (pos, texel) = task?;
-            if !render_target.set(pos, texel) {
-                warn!("Ignored texel at position {} due to format mismatch (expected format '{:?}')", pos, self.swap_chain.format());
+            for y in 0..self.swap_chain.height() {
+                for x in 0..self.swap_chain.width() {
+                    let task = Task {
+                        script_code: self.scripts[self.cur_pass].clone(),
+                        previous: previous.clone(),
+                        parameters: self.parameters.clone(),
+                        format: self.swap_chain.format(),
+                        width: self.swap_chain.width(),
+                        height: self.swap_chain.height(),
+                        vms: vms.clone()
+                    };
+                    pool.send(&manager, move |_| task.run(x, y, total as _, intty));
+                }
+            }
+            for task in pool.reduce().map(|v| v.unwrap()) {
+                let (pos, texel) = task?;
+                if !render_target.set(pos, texel) {
+                    warn!("Ignored texel at position {} due to format mismatch (expected format '{:?}')", pos, self.swap_chain.format());
+                }
             }
         }
         self.cur_pass += 1;
-        self.swap_chain.put_back(render_target);
         if let Some(prev) = previous {
             self.swap_chain.put_back(Arc::try_unwrap(prev)
                 .expect("ThreadPool termination failure"));
         }
+        self.swap_chain.put_back(render_target);
         Ok(())
     }
 
