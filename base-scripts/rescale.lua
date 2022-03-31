@@ -58,7 +58,7 @@ local CONVERSIONS = {
         return texel:normalize()
     end,
     [format.F32] = function(texel)
-        return texel:normalize().r
+        return texel:normalize().x
     end
 }
 
