@@ -32,7 +32,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
-use log::{debug, info};
+use tracing::{debug, info};
 use thiserror::Error;
 use crate::texture::Texture;
 

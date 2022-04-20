@@ -34,8 +34,9 @@ use bp3d_lua::math::LibMath;
 use bp3d_lua::number::Checked;
 use bp3d_lua::vector::LibVector;
 use bp3d_threads::{ThreadPool, UnscopedThreadManager};
+use bp3d_tracing::DisableStdoutLogger;
 use crossbeam::queue::ArrayQueue;
-use log::{info, warn};
+use tracing::{info, span, warn, Level, instrument};
 use nalgebra::Point2;
 use rlua::Function;
 use crate::lua::{GLOBAL_BUFFER, BUFFER_FORMAT, BUFFER_WIDTH, BUFFER_HEIGHT, GLOBAL_PREVIOUS, GLOBAL_PARAMETERS, Lib, LuaOutTexel, LuaParameters, LuaTexture};
@@ -92,6 +93,7 @@ impl Task {
         }
     }
 
+    #[instrument(level = "trace", skip(self, total, intty))]
     fn run(self, x: u32, y: u32, total: f64, intty: bool) -> rlua::Result<(Point2<u32>, Texel)> {
         let (vms, engine) = self.init_lua_engine()?;
         let res = engine.context(|ctx| {
@@ -139,21 +141,26 @@ impl Pipeline {
     pub fn next_pass(&mut self) -> rlua::Result<()> {
         assert!(self.cur_pass < self.scripts.len()); //Make sure we're not gonna jump into a
         // non-existent pass
+        let _span = span!(Level::DEBUG, "Next render pass", render_pass = self.cur_pass).entered();
         let mut render_target = self.swap_chain.next();
         let previous = if self.cur_pass == 0 { None } else { Some(self.swap_chain.next()) }.map(Arc::new);
         let mut pool: ThreadPool<UnscopedThreadManager, rlua::Result<(Point2<u32>, Texel)>> = ThreadPool::new(self.n_threads);
         let manager = UnscopedThreadManager::new();
-        info!("Initialized thread pool with {} max thread(s)", self.n_threads);
+        info!(max_threads = self.n_threads, "Initialized thread pool");
         //At this point we don't yet have threads so use relaxed ordering.
         PROCESSED_TEXELS.store(0, Ordering::Relaxed);
         {
             let total = self.swap_chain.height() * self.swap_chain.width();
             let vms = Arc::new(ArrayQueue::new(self.n_threads));
             let intty = atty::is(atty::Stream::Stdout);
-            if intty {
-                log::logger().flush();
-                print!("0% done...");
-            }
+            let _guard = match intty {
+                true => {
+                    let guard = DisableStdoutLogger::new();
+                    print!("0% done...");
+                    Some(guard)
+                },
+                false => None
+            };
             for y in 0..self.swap_chain.height() {
                 for x in 0..self.swap_chain.width() {
                     let task = Task {
@@ -171,8 +178,11 @@ impl Pipeline {
             for task in pool.reduce().map(|v| v.unwrap()) {
                 let (pos, texel) = task?;
                 if !render_target.set(pos, texel) {
-                    warn!("Ignored texel at position {} due to format mismatch (expected format '{:?}')", pos, self.swap_chain.format());
+                    warn!(?pos, expected_format = ?self.swap_chain.format(), "Ignored texel due to format mismatch");
                 }
+            }
+            if intty {
+                println!()
             }
         }
         self.cur_pass += 1;

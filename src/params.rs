@@ -35,7 +35,7 @@ use image::io::Reader;
 use os_str_bytes::OsStrBytes;
 use crate::math::{Vec2f, Vec3f, Vec4f};
 use crate::template::{Template, Type};
-use log::error;
+use tracing::error;
 use crate::texture::ImageTexture;
 use thiserror::Error;
 

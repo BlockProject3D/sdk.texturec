@@ -28,7 +28,8 @@
 
 use std::path::Path;
 use clap::{Arg, Command};
-use log::{info, LevelFilter};
+//use log::{info, LevelFilter};
+use tracing::{debug, info};
 use crate::swapchain::SwapChain;
 
 mod template;
@@ -54,24 +55,12 @@ macro_rules! etry {
     };
 }
 
-fn alloc_verbosity_level(verbosity: u64) {
-    match verbosity {
-        0 => log::set_max_level(LevelFilter::Error),
-        1 => log::set_max_level(LevelFilter::Warn),
-        2 => log::set_max_level(LevelFilter::Info),
-        3 => log::set_max_level(LevelFilter::Debug),
-        _ => log::set_max_level(LevelFilter::Trace),
-    };
-}
-
 fn run() -> i32 {
     let matches = Command::new(PROG_NAME)
         .author("BlockProject 3D")
         .about("BlockProject 3D SDK - Shader Compiler")
         .version(PROG_VERSION)
         .args([
-            Arg::new("verbose").short('v').long("verbose").multiple_occurrences(true)
-                .help("Enable verbose output"),
             Arg::new("debug").short('d').long("debug")
                 .help("Enable debug PNG output"),
             Arg::new("template").short('t').long("--template").allow_invalid_utf8(true).takes_value(true).required(true)
@@ -87,7 +76,6 @@ fn run() -> i32 {
             Arg::new("parameter").short('p').long("parameter").takes_value(true).multiple_occurrences(true).allow_invalid_utf8(true)
                 .help("Specify a template parameter using the syntax <parameter name>=<parameter value>")
         ]).get_matches();
-    alloc_verbosity_level(matches.occurrences_of("verbose"));
     let template_path = matches.value_of_os("template").map(Path::new).unwrap();
     info!("Loading template {:?}...", template_path);
     let template = etry!(("failed to load template" 1) =>
@@ -100,8 +88,9 @@ fn run() -> i32 {
     let height: u32 = matches.value_of_t("height")
         .or_else(|_| template.try_height_from_base_texture(&params).ok_or(()))
         .unwrap_or(template.default_height);
-    info!("Creating new swap chain...");
+    info!(width, height, format = ?template.format, "Creating new swap chain...");
     let chain = SwapChain::new(width, height, template.format);
+    debug!(width = chain.width(), height = chain.height(), format = ?chain.format(), "Created new swap chain");
     info!("Loading scripts...");
     let scripts = etry!(("failed to load pipeline scripts" 1) =>
         template.load_scripts(template_path.parent().unwrap_or(Path::new("."))));
@@ -121,6 +110,9 @@ fn run() -> i32 {
 }
 
 fn main() {
-    let code = bp3d_logger::Logger::new().add_file("bp3d-sdk").add_stdout().run(run);
+    let code = {
+        let _guard = bp3d_tracing::initialize("bp3d-sdk");
+        run()
+    };
     std::process::exit(code);
 }
