@@ -45,7 +45,7 @@ use crate::SwapChain;
 use crate::template::Format;
 use crate::texture::{OutputTexture, Texel};
 
-const DISPLAY_INTERVAL: u32 = 8192;
+const DISPLAY_INTERVAL: u32 = 2;
 
 fn print_progress(progress: f64) {
     let useless = std::io::stdout();
@@ -69,6 +69,7 @@ impl Task {
         match self.vms.pop() {
             Some(v) => Ok((self.vms, v)),
             None => {
+                let _span = span!(Level::TRACE, "LuaEngine_new").entered();
                 let engine = LuaEngine::new()?;
                 engine.load_format()?;
                 engine.load_math()?;
@@ -97,6 +98,7 @@ impl Task {
     fn run(self, x: u32, y: u32, total: f64, intty: bool) -> rlua::Result<(Point2<u32>, Texel)> {
         let (vms, engine) = self.init_lua_engine()?;
         let res = engine.context(|ctx| {
+            let _span = span!(Level::TRACE, "Lua_main").entered();
             let main: Function = ctx.globals().get("main")?;
             main.call((x, y))
         }).map(|v: LuaOutTexel| v.into_inner()).map(|v| (Point2::new(x, y), v));
