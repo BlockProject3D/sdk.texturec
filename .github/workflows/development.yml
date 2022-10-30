@@ -1,0 +1,84 @@
+name: Development
+
+on:
+  - push
+  - workflow_dispatch
+
+jobs:
+  test-build:
+    name: Build & Test
+    strategy:
+      matrix:
+        os:
+          - ubuntu-20.04
+          - macos-11
+          - windows-2019
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Build
+        run: cargo build --all-features
+      - name: Test
+        uses: bp3d-actions/cargo@main
+        with:
+          check-name: cargo test (${{ matrix.os }})
+          command: test
+          args: --all-features --no-fail-fast
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  clippy:
+    name: Check | Clippy
+    if: ${{ always() }}
+    needs: test-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Run check
+        uses: bp3d-actions/clippy-check@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all-features
+
+  audit:
+    name: Check | Audit
+    if: ${{ always() }}
+    needs: test-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Audit Tool
+        run: cargo install cargo-audit
+      - name: Run check
+        uses: bp3d-actions/audit-check@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  fmt:
+    name: Format Code
+    if: ${{ always() && github.ref != 'refs/heads/master' }}
+    needs:
+      - clippy
+      - audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Run code formatter
+        uses: bp3d-actions/rustfmt-check@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
