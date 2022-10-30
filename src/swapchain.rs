@@ -36,7 +36,7 @@ pub struct SwapChain {
     index: usize,
     width: u32,
     height: u32,
-    format: Format
+    format: Format,
 }
 
 impl SwapChain {
@@ -54,7 +54,7 @@ impl SwapChain {
             index: 0,
             width,
             height,
-            format
+            format,
         }
     }
 
@@ -76,7 +76,8 @@ impl SwapChain {
         if self.index >= SWAP_CHAIN_LEN {
             self.index = 0;
         }
-        let texture = self.chain[self.index].take()
+        let texture = self.chain[self.index]
+            .take()
             .unwrap_or_else(|| OutputTexture::new(self.width, self.height, self.format));
         self.index += 1;
         texture

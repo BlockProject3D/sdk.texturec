@@ -26,19 +26,19 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::path::Path;
 use clap::{Arg, Command};
+use std::path::Path;
 //use log::{info, LevelFilter};
-use tracing::{debug, info};
 use crate::swapchain::SwapChain;
+use tracing::{debug, info};
 
-mod template;
+mod lua;
 mod math;
 mod params;
-mod texture;
-mod swapchain;
 mod pipeline;
-mod lua;
+mod swapchain;
+mod template;
+mod texture;
 
 const PROG_NAME: &str = env!("CARGO_PKG_NAME");
 const PROG_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -82,10 +82,12 @@ fn run() -> i32 {
         template::Template::load(template_path));
     let params = etry!(("failed to parse parameters" 1) =>
         params::Parameters::parse(&template, matches.values_of_os("parameter")));
-    let width: u32 = matches.value_of_t("width")
+    let width: u32 = matches
+        .value_of_t("width")
         .or_else(|_| template.try_width_from_base_texture(&params).ok_or(()))
         .unwrap_or(template.default_width);
-    let height: u32 = matches.value_of_t("height")
+    let height: u32 = matches
+        .value_of_t("height")
         .or_else(|_| template.try_height_from_base_texture(&params).ok_or(()))
         .unwrap_or(template.default_height);
     info!(width, height, format = ?template.format, "Creating new swap chain...");
@@ -95,7 +97,12 @@ fn run() -> i32 {
     let scripts = etry!(("failed to load pipeline scripts" 1) =>
         template.load_scripts(template_path.parent().unwrap_or(Path::new("."))));
     let pass_count = scripts.len();
-    let mut pipeline  = pipeline::Pipeline::new(scripts, params, chain, matches.value_of_t("threads").unwrap_or(1));
+    let mut pipeline = pipeline::Pipeline::new(
+        scripts,
+        params,
+        chain,
+        matches.value_of_t("threads").unwrap_or(1),
+    );
     for _ in 0..pass_count {
         etry!(("failed to run pass" 1) => pipeline.next_pass());
     }

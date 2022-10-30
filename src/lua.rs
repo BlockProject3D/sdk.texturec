@@ -26,17 +26,20 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
-use bp3d_lua::{LuaEngine, ValueExt};
-use bp3d_lua::number::{Checked, Int, NumToLua};
-use bp3d_lua::vector::{LuaVec2, LuaVec3, LuaVec4};
-use nalgebra::{Point2, Vector4};
-use rlua::{Context, Error, FromLua, FromLuaMulti, Table, ToLua, ToLuaMulti, UserData, UserDataMethods, Value};
-use rlua::prelude::{LuaMultiValue, LuaString};
 use crate::math::Vec4f;
 use crate::params::{Parameter, SharedParameters};
 use crate::template::Format;
 use crate::texture::{Texel, Texture};
+use bp3d_lua::number::{Checked, Int, NumToLua};
+use bp3d_lua::vector::{LuaVec2, LuaVec3, LuaVec4};
+use bp3d_lua::{LuaEngine, ValueExt};
+use nalgebra::{Point2, Vector4};
+use rlua::prelude::{LuaMultiValue, LuaString};
+use rlua::{
+    Context, Error, FromLua, FromLuaMulti, Table, ToLua, ToLuaMulti, UserData, UserDataMethods,
+    Value,
+};
+use std::sync::Arc;
 
 pub const GLOBAL_PARAMETERS: &str = "Parameters";
 pub const GLOBAL_PREVIOUS: &str = "Previous";
@@ -52,7 +55,7 @@ impl<'lua> ToLua<'lua> for Format {
             Format::LA8 => Int(1).to_lua(lua),
             Format::RGBA8 => Int(2).to_lua(lua),
             Format::RGBAF32 => Int(3).to_lua(lua),
-            Format::F32 => Int(4).to_lua(lua)
+            Format::F32 => Int(4).to_lua(lua),
         }
     }
 }
@@ -69,8 +72,8 @@ impl<'lua> FromLua<'lua> for Format {
             _ => Err(Error::FromLuaConversionError {
                 from: "i32",
                 to: "Format",
-                message: Some("invalid format enum".to_string())
-            })
+                message: Some("invalid format enum".to_string()),
+            }),
         }
     }
 }
@@ -80,13 +83,15 @@ pub struct LuaTexel(Texel);
 
 impl UserData for LuaTexel {
     fn add_methods<'lua, T: UserDataMethods<'lua, Self>>(methods: &mut T) {
-        methods.add_method("rgba", |ctx, this, ()| {
-            match this.0.rgba() {
-                Some((r, g, b, a)) => (Checked(r), Checked(g), Checked(b), Checked(a)).to_lua_multi(ctx),
-                None => Ok(LuaMultiValue::new())
+        methods.add_method("rgba", |ctx, this, ()| match this.0.rgba() {
+            Some((r, g, b, a)) => {
+                (Checked(r), Checked(g), Checked(b), Checked(a)).to_lua_multi(ctx)
             }
+            None => Ok(LuaMultiValue::new()),
         });
-        methods.add_method("normalize", |_, this, ()| Ok(LuaVec4::from(this.0.normalize())));
+        methods.add_method("normalize", |_, this, ()| {
+            Ok(LuaVec4::from(this.0.normalize()))
+        });
     }
 }
 
@@ -98,13 +103,20 @@ impl<T> LuaTexture<T> {
     }
 }
 
-impl<T> UserData for LuaTexture<T> where T: Texture {
+impl<T> UserData for LuaTexture<T>
+where
+    T: Texture,
+{
     fn add_methods<'lua, T1: UserDataMethods<'lua, Self>>(methods: &mut T1) {
         methods.add_method("width", |_, this, ()| Ok(Checked(this.0.width())));
         methods.add_method("height", |_, this, ()| Ok(Checked(this.0.height())));
         methods.add_method("format", |_, this, ()| Ok(this.0.format()));
-        methods.add_method("get", |_, this, (x, y): (Checked<u32>, Checked<u32>)| Ok(this.0.get(Point2::new(x.0, y.0)).map(|v| LuaTexel(v))));
-        methods.add_method("sample", |_, this, pos: LuaVec2<f64>| Ok(this.0.sample(pos.into()).map(|v| LuaTexel(v))));
+        methods.add_method("get", |_, this, (x, y): (Checked<u32>, Checked<u32>)| {
+            Ok(this.0.get(Point2::new(x.0, y.0)).map(|v| LuaTexel(v)))
+        });
+        methods.add_method("sample", |_, this, pos: LuaVec2<f64>| {
+            Ok(this.0.sample(pos.into()).map(|v| LuaTexel(v)))
+        });
     }
 }
 
@@ -119,7 +131,10 @@ fn ensure_value_count(actual: usize, expected: &[usize]) -> rlua::Result<usize> 
     count.ok_or_else(|| Error::FromLuaConversionError {
         from: "?",
         to: "Texel",
-        message: Some(format!("expected {:#?} value(s) got {} value(s)", expected, actual))
+        message: Some(format!(
+            "expected {:#?} value(s) got {} value(s)",
+            expected, actual
+        )),
     })
 }
 
@@ -135,7 +150,12 @@ impl LuaOutTexel {
 impl<'lua> FromLuaMulti<'lua> for LuaOutTexel {
     fn from_lua_multi(values: LuaMultiValue<'lua>, lua: Context<'lua>) -> rlua::Result<Self> {
         if values.len() == 1 {
-            if let Ok(texel) = values.iter().nth(0).map(|v| v.check_userdata::<LuaTexel>()).unwrap() {
+            if let Ok(texel) = values
+                .iter()
+                .nth(0)
+                .map(|v| v.check_userdata::<LuaTexel>())
+                .unwrap()
+            {
                 return Ok(LuaOutTexel(texel.0));
             }
         }
@@ -146,14 +166,14 @@ impl<'lua> FromLuaMulti<'lua> for LuaOutTexel {
                 ensure_value_count(values.len(), &[1])?;
                 let luma: Checked<u8> = Checked::from_lua(values.into_iter().last().unwrap(), lua)?;
                 Texel::L8(luma.0)
-            },
+            }
             Format::LA8 => {
                 ensure_value_count(values.len(), &[2])?;
                 let mut iter = values.into_iter();
                 let luma: Checked<u8> = Checked::from_lua(iter.next().unwrap(), lua)?;
                 let alpha: Checked<u8> = Checked::from_lua(iter.next().unwrap(), lua)?;
                 Texel::LA8(luma.0, alpha.0)
-            },
+            }
             Format::RGBA8 => {
                 let size = ensure_value_count(values.len(), &[1, 3, 4])?;
                 let mut iter = values.into_iter();
@@ -163,18 +183,24 @@ impl<'lua> FromLuaMulti<'lua> for LuaOutTexel {
                         let v = iter.next().unwrap();
                         let vec: Vec4f = LuaVec4::from_lua(v.clone(), lua)
                             .map(|v| v.into_inner())
-                            .or_else(|_| LuaVec3::from_lua(v, lua)
-                                .map(|v| v.into_inner().push(1.0)))?;
+                            .or_else(|_| {
+                                LuaVec3::from_lua(v, lua).map(|v| v.into_inner().push(1.0))
+                            })?;
                         let denormalized = (vec * 255.0).map(|v| v as u8);
-                        Texel::RGBA8(denormalized.x, denormalized.y, denormalized.z, denormalized.w)
-                    },
+                        Texel::RGBA8(
+                            denormalized.x,
+                            denormalized.y,
+                            denormalized.z,
+                            denormalized.w,
+                        )
+                    }
                     3 => {
                         // Must be RGB u8 or error.
                         let r: Checked<u8> = Checked::from_lua(iter.next().unwrap(), lua)?;
                         let g: Checked<u8> = Checked::from_lua(iter.next().unwrap(), lua)?;
                         let b: Checked<u8> = Checked::from_lua(iter.next().unwrap(), lua)?;
                         Texel::RGBA8(r.0, g.0, b.0, 255)
-                    },
+                    }
                     4 => {
                         // Must be RGBA u8 or error.
                         let r: Checked<u8> = Checked::from_lua(iter.next().unwrap(), lua)?;
@@ -182,10 +208,10 @@ impl<'lua> FromLuaMulti<'lua> for LuaOutTexel {
                         let b: Checked<u8> = Checked::from_lua(iter.next().unwrap(), lua)?;
                         let a: Checked<u8> = Checked::from_lua(iter.next().unwrap(), lua)?;
                         Texel::RGBA8(r.0, g.0, b.0, a.0)
-                    },
-                    _ => unreachable!()
+                    }
+                    _ => unreachable!(),
                 }
-            },
+            }
             Format::RGBAF32 => {
                 let size = ensure_value_count(values.len(), &[1, 4])?;
                 let mut iter = values.into_iter();
@@ -195,7 +221,7 @@ impl<'lua> FromLuaMulti<'lua> for LuaOutTexel {
                         let v = iter.next().unwrap();
                         let vec: Vector4<f32> = LuaVec4::from_lua(v, lua)?.into_inner();
                         Texel::RGBAF32(vec.x, vec.y, vec.z, vec.w)
-                    },
+                    }
                     4 => {
                         // Must be RGBA f32.
                         let r: Checked<f32> = Checked::from_lua(iter.next().unwrap(), lua)?;
@@ -203,10 +229,10 @@ impl<'lua> FromLuaMulti<'lua> for LuaOutTexel {
                         let b: Checked<f32> = Checked::from_lua(iter.next().unwrap(), lua)?;
                         let a: Checked<f32> = Checked::from_lua(iter.next().unwrap(), lua)?;
                         Texel::RGBAF32(r.0, g.0, b.0, a.0)
-                    },
-                    _ => unreachable!()
+                    }
+                    _ => unreachable!(),
                 }
-            },
+            }
             Format::F32 => {
                 ensure_value_count(values.len(), &[1])?;
                 let val: Checked<f32> = Checked::from_lua(values.into_iter().last().unwrap(), lua)?;
@@ -228,15 +254,18 @@ impl UserData for LuaParameters {
     fn add_methods<'lua, T: UserDataMethods<'lua, Self>>(methods: &mut T) {
         methods.add_method("get", |ctx, this, name: LuaString| {
             let name = name.to_str()?;
-            this.0.get(name).map(|v| match v {
-                Parameter::Texture(a) => LuaTexture(a.clone()).to_lua(ctx),
-                Parameter::Float(v) => Ok(v.num_to_lua()),
-                Parameter::Bool(v) => v.to_lua(ctx),
-                Parameter::Int(v) => Ok(v.num_to_lua()),
-                Parameter::Vector2(v) => LuaVec2::from(*v).to_lua(ctx),
-                Parameter::Vector3(v) => LuaVec3::from(*v).to_lua(ctx),
-                Parameter::Vector4(v) => LuaVec4::from(*v).to_lua(ctx)
-            }).transpose()
+            this.0
+                .get(name)
+                .map(|v| match v {
+                    Parameter::Texture(a) => LuaTexture(a.clone()).to_lua(ctx),
+                    Parameter::Float(v) => Ok(v.num_to_lua()),
+                    Parameter::Bool(v) => v.to_lua(ctx),
+                    Parameter::Int(v) => Ok(v.num_to_lua()),
+                    Parameter::Vector2(v) => LuaVec2::from(*v).to_lua(ctx),
+                    Parameter::Vector3(v) => LuaVec3::from(*v).to_lua(ctx),
+                    Parameter::Vector4(v) => LuaVec4::from(*v).to_lua(ctx),
+                })
+                .transpose()
         })
     }
 }
