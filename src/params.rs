@@ -26,18 +26,18 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use crate::math::{Vec2f, Vec3f, Vec4f};
+use crate::template::{Template, Type};
+use crate::texture::ImageTexture;
+use bstr::ByteSlice;
+use image::io::Reader;
+use os_str_bytes::OsStrBytes;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::sync::Arc;
-use bstr::ByteSlice;
-use image::io::Reader;
-use os_str_bytes::OsStrBytes;
-use crate::math::{Vec2f, Vec3f, Vec4f};
-use crate::template::{Template, Type};
-use tracing::error;
-use crate::texture::ImageTexture;
 use thiserror::Error;
+use tracing::error;
 
 /// Image load error.
 #[derive(Debug, Error)]
@@ -45,7 +45,7 @@ pub enum ImageError {
     #[error("io error: {0}")]
     Io(std::io::Error),
     #[error("decoding error: {0}")]
-    Image(image::error::ImageError)
+    Image(image::error::ImageError),
 }
 
 /// Parameter initialization error.
@@ -65,7 +65,7 @@ pub enum Error {
 
     /// An image parameter failed to load.
     #[error("image error: {0}")]
-    Image(ImageError)
+    Image(ImageError),
 }
 
 pub enum Parameter {
@@ -75,15 +75,18 @@ pub enum Parameter {
     Int(i64),
     Vector2(Vec2f),
     Vector3(Vec3f),
-    Vector4(Vec4f)
+    Vector4(Vec4f),
 }
 
 pub struct Parameters {
-    content: Option<HashMap<String, Parameter>>
+    content: Option<HashMap<String, Parameter>>,
 }
 
 impl Parameters {
-    pub fn parse<'a>(template: &Template, params: Option<impl Iterator<Item = &'a OsStr>>) -> Result<Parameters, Error> {
+    pub fn parse<'a>(
+        template: &Template,
+        params: Option<impl Iterator<Item = &'a OsStr>>,
+    ) -> Result<Parameters, Error> {
         let mut content: Option<HashMap<String, Parameter>> = None;
         if params.is_none() {
             return Ok(Parameters { content });
@@ -98,61 +101,100 @@ impl Parameters {
                 Some(ty) => {
                     let val = match ty {
                         Type::Texture => {
-                            let image = Reader::open(Path::new(&OsStr::from_raw_bytes(value).unwrap()))
-                                .map_err(|e| Error::Image(ImageError::Io(e)))?.decode()
-                                .map_err(|e| Error::Image(ImageError::Image(e)))?;
+                            let image =
+                                Reader::open(Path::new(&OsStr::from_raw_bytes(value).unwrap()))
+                                    .map_err(|e| Error::Image(ImageError::Io(e)))?
+                                    .decode()
+                                    .map_err(|e| Error::Image(ImageError::Image(e)))?;
                             Parameter::Texture(Arc::new(ImageTexture::new(image)))
-                        },
-                        Type::Float => Parameter::Float(std::str::from_utf8(value)
-                            .map_err(|_| Error::InvalidUtf8)?.parse()
-                            .map_err(|_| Error::InvalidFormat)?),
-                        Type::Bool => Parameter::Bool(if value == b"true" || value == b"on"
-                            || value == b"1" { true } else { false }),
-                        Type::Int => Parameter::Int(std::str::from_utf8(value)
-                            .map_err(|_| Error::InvalidUtf8)?.parse()
-                            .map_err(|_| Error::InvalidFormat)?),
+                        }
+                        Type::Float => Parameter::Float(
+                            std::str::from_utf8(value)
+                                .map_err(|_| Error::InvalidUtf8)?
+                                .parse()
+                                .map_err(|_| Error::InvalidFormat)?,
+                        ),
+                        Type::Bool => Parameter::Bool(
+                            if value == b"true" || value == b"on" || value == b"1" {
+                                true
+                            } else {
+                                false
+                            },
+                        ),
+                        Type::Int => Parameter::Int(
+                            std::str::from_utf8(value)
+                                .map_err(|_| Error::InvalidUtf8)?
+                                .parse()
+                                .map_err(|_| Error::InvalidFormat)?,
+                        ),
                         Type::Vector2 => {
                             let subval = &value[1..value.len() - 1];
-                            let mut val = std::str::from_utf8(subval).map_err(|_| Error::InvalidUtf8)?.split(',');
+                            let mut val = std::str::from_utf8(subval)
+                                .map_err(|_| Error::InvalidUtf8)?
+                                .split(',');
                             Parameter::Vector2(Vec2f::new(
-                                val.next().ok_or(Error::InvalidFormat)?.parse()
+                                val.next()
+                                    .ok_or(Error::InvalidFormat)?
+                                    .parse()
                                     .map_err(|_| Error::InvalidFormat)?,
-                                val.next().ok_or(Error::InvalidFormat)?.parse()
-                                    .map_err(|_| Error::InvalidFormat)?
+                                val.next()
+                                    .ok_or(Error::InvalidFormat)?
+                                    .parse()
+                                    .map_err(|_| Error::InvalidFormat)?,
                             ))
-                        },
+                        }
                         Type::Vector3 => {
                             let subval = &value[1..value.len() - 1];
-                            let mut val = std::str::from_utf8(subval).map_err(|_| Error::InvalidUtf8)?.split(',');
+                            let mut val = std::str::from_utf8(subval)
+                                .map_err(|_| Error::InvalidUtf8)?
+                                .split(',');
                             Parameter::Vector3(Vec3f::new(
-                                val.next().ok_or(Error::InvalidFormat)?.parse()
+                                val.next()
+                                    .ok_or(Error::InvalidFormat)?
+                                    .parse()
                                     .map_err(|_| Error::InvalidFormat)?,
-                                val.next().ok_or(Error::InvalidFormat)?.parse()
+                                val.next()
+                                    .ok_or(Error::InvalidFormat)?
+                                    .parse()
                                     .map_err(|_| Error::InvalidFormat)?,
-                                val.next().ok_or(Error::InvalidFormat)?.parse()
-                                    .map_err(|_| Error::InvalidFormat)?
+                                val.next()
+                                    .ok_or(Error::InvalidFormat)?
+                                    .parse()
+                                    .map_err(|_| Error::InvalidFormat)?,
                             ))
                         }
                         Type::Vector4 => {
                             let subval = &value[1..value.len() - 1];
-                            let mut val = std::str::from_utf8(subval).map_err(|_| Error::InvalidUtf8)?.split(',');
+                            let mut val = std::str::from_utf8(subval)
+                                .map_err(|_| Error::InvalidUtf8)?
+                                .split(',');
                             Parameter::Vector4(Vec4f::new(
-                                val.next().ok_or(Error::InvalidFormat)?.parse()
+                                val.next()
+                                    .ok_or(Error::InvalidFormat)?
+                                    .parse()
                                     .map_err(|_| Error::InvalidFormat)?,
-                                val.next().ok_or(Error::InvalidFormat)?.parse()
+                                val.next()
+                                    .ok_or(Error::InvalidFormat)?
+                                    .parse()
                                     .map_err(|_| Error::InvalidFormat)?,
-                                val.next().ok_or(Error::InvalidFormat)?.parse()
+                                val.next()
+                                    .ok_or(Error::InvalidFormat)?
+                                    .parse()
                                     .map_err(|_| Error::InvalidFormat)?,
-                                val.next().ok_or(Error::InvalidFormat)?.parse()
-                                    .map_err(|_| Error::InvalidFormat)?
+                                val.next()
+                                    .ok_or(Error::InvalidFormat)?
+                                    .parse()
+                                    .map_err(|_| Error::InvalidFormat)?,
                             ))
                         }
                     };
-                    content.get_or_insert_with(Default::default).insert(name.into(), val);
-                },
+                    content
+                        .get_or_insert_with(Default::default)
+                        .insert(name.into(), val);
+                }
                 None => {
                     error!("Undeclared parameter '{}'", name);
-                    return Err(Error::Undeclared)
+                    return Err(Error::Undeclared);
                 }
             }
         }

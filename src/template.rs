@@ -26,15 +26,15 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use crate::texture::Texture;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
-use tracing::{debug, info};
 use thiserror::Error;
-use crate::texture::Texture;
+use tracing::{debug, info};
 
 /// Enum for supported texture formats.
 #[derive(Deserialize, Debug, Copy, Clone)]
@@ -52,20 +52,19 @@ pub enum Format {
     RGBAF32,
 
     /// 32 bits float (32bpp).
-    F32
-
-    // No support for RGB textures as these are not efficient and some rendering apis do not even
-    // support loading those natively (ex DX11, etc).
+    F32, // No support for RGB textures as these are not efficient and some rendering apis do not even
+         // support loading those natively (ex DX11, etc).
 }
 
 impl Format {
-    pub fn texel_size(&self) -> u32 { //Returns the texel size in bytes
+    pub fn texel_size(&self) -> u32 {
+        //Returns the texel size in bytes
         match self {
             Format::L8 => 1,
             Format::LA8 => 2,
             Format::RGBA8 => 4,
             Format::RGBAF32 => 16,
-            Format::F32 => 4
+            Format::F32 => 4,
         }
     }
 }
@@ -78,7 +77,7 @@ pub enum Type {
     Int,
     Vector2,
     Vector3,
-    Vector4
+    Vector4,
 }
 
 pub type Parameters = HashMap<String, Type>;
@@ -105,7 +104,7 @@ pub struct Template {
     pub parameters: Parameters,
 
     /// List of lua scripts to run, in order, before saving the output texture BPX.
-    pub pipeline: Vec<String>
+    pub pipeline: Vec<String>,
 }
 
 #[derive(Debug, Error)]
@@ -113,7 +112,7 @@ pub enum Error {
     #[error("io error: {0}")]
     Io(std::io::Error),
     #[error("parse error: {0}")]
-    Toml(toml::de::Error)
+    Toml(toml::de::Error),
 }
 
 impl Template {
@@ -127,14 +126,14 @@ impl Template {
     pub fn try_width_from_base_texture(&self, params: &crate::params::Parameters) -> Option<u32> {
         params.get(self.base_texture.as_ref()?).map(|v| match v {
             crate::params::Parameter::Texture(tex) => Some(tex.width()),
-            _ => None
+            _ => None,
         })?
     }
 
     pub fn try_height_from_base_texture(&self, params: &crate::params::Parameters) -> Option<u32> {
         params.get(self.base_texture.as_ref()?).map(|v| match v {
             crate::params::Parameter::Texture(tex) => Some(tex.height()),
-            _ => None
+            _ => None,
         })?
     }
 

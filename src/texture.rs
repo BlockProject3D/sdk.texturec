@@ -26,11 +26,11 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use crate::math::{Vec2f, Vec4f};
+use crate::template::Format;
 use byteorder::{ByteOrder, LittleEndian};
 use image::{DynamicImage, GrayAlphaImage, GrayImage, RgbaImage};
 use nalgebra::Point2;
-use crate::math::{Vec2f, Vec4f};
-use crate::template::Format;
 
 #[derive(Copy, Clone)]
 pub enum Texel {
@@ -38,7 +38,7 @@ pub enum Texel {
     LA8(u8, u8),
     RGBA8(u8, u8, u8, u8),
     F32(f32),
-    RGBAF32(f32, f32, f32, f32)
+    RGBAF32(f32, f32, f32, f32),
 }
 
 impl Texel {
@@ -49,18 +49,20 @@ impl Texel {
             Texel::LA8(l, a) => Some((*l, *l, *l, *a)),
             Texel::RGBA8(r, g, b, a) => Some((*r, *g, *b, *a)),
             Texel::F32(_) => None,
-            Texel::RGBAF32(_, _, _, _) => None
+            Texel::RGBAF32(_, _, _, _) => None,
         }
     }
 
     /// Converts this texel to a floating point vector. When this texel is RGBA or RGBA compatible,
     /// value is normalized assuming a maximum of 255.
     pub fn normalize(&self) -> Vec4f {
-        self.rgba().map(|(r, g, b, a)| Vec4f::new(r as _, g as _, b as _, a as _) / 255.0).unwrap_or_else(|| match self {
-            Texel::F32(v) => Vec4f::from_element(*v as _),
-            Texel::RGBAF32(r, g, b, a) => Vec4f::new(*r as _, *g as _, *b as _, *a as _),
-            _ => unsafe { std::hint::unreachable_unchecked() }
-        })
+        self.rgba()
+            .map(|(r, g, b, a)| Vec4f::new(r as _, g as _, b as _, a as _) / 255.0)
+            .unwrap_or_else(|| match self {
+                Texel::F32(v) => Vec4f::from_element(*v as _),
+                Texel::RGBAF32(r, g, b, a) => Vec4f::new(*r as _, *g as _, *b as _, *a as _),
+                _ => unsafe { std::hint::unreachable_unchecked() },
+            })
     }
 }
 
@@ -79,18 +81,19 @@ pub trait Texture {
 
     /// Samples a texel by nearest position (individual coordinates in the 0-1 range).
     fn sample(&self, pos: Vec2f) -> Option<Texel> {
-        let pos = pos.component_mul(&Vec2f::new(self.width() as _, self.height() as _)).map(|v| v as u32);
+        let pos = pos
+            .component_mul(&Vec2f::new(self.width() as _, self.height() as _))
+            .map(|v| v as u32);
         self.get(pos.into())
     }
 }
 
-pub enum ImageTexture
-{
+pub enum ImageTexture {
     R8(GrayImage),
 
     RA8(GrayAlphaImage),
 
-    RGBA8(RgbaImage)
+    RGBA8(RgbaImage),
 }
 
 impl ImageTexture {
@@ -99,7 +102,7 @@ impl ImageTexture {
             DynamicImage::ImageLuma8(v) => ImageTexture::R8(v),
             DynamicImage::ImageLumaA8(v) => ImageTexture::RA8(v),
             DynamicImage::ImageRgba8(v) => ImageTexture::RGBA8(v),
-            v => ImageTexture::RGBA8(v.to_rgba8())
+            v => ImageTexture::RGBA8(v.to_rgba8()),
         }
     }
 }
@@ -107,12 +110,13 @@ impl ImageTexture {
 impl Texture for ImageTexture {
     fn get(&self, pos: Point2<u32>) -> Option<Texel> {
         match self {
-            ImageTexture::R8(v) => v.get_pixel_checked(pos.x, pos.y)
-                .map(|v| Texel::L8(v[0])),
-            ImageTexture::RA8(v) => v.get_pixel_checked(pos.x, pos.y)
+            ImageTexture::R8(v) => v.get_pixel_checked(pos.x, pos.y).map(|v| Texel::L8(v[0])),
+            ImageTexture::RA8(v) => v
+                .get_pixel_checked(pos.x, pos.y)
                 .map(|v| Texel::LA8(v[0], v[1])),
-            ImageTexture::RGBA8(v) => v.get_pixel_checked(pos.x, pos.y)
-                .map(|v| Texel::RGBA8(v[0], v[1], v[2], v[3]))
+            ImageTexture::RGBA8(v) => v
+                .get_pixel_checked(pos.x, pos.y)
+                .map(|v| Texel::RGBA8(v[0], v[1], v[2], v[3])),
         }
     }
 
@@ -120,7 +124,7 @@ impl Texture for ImageTexture {
         match self {
             ImageTexture::R8(_) => Format::L8,
             ImageTexture::RA8(_) => Format::LA8,
-            ImageTexture::RGBA8(_) => Format::RGBA8
+            ImageTexture::RGBA8(_) => Format::RGBA8,
         }
     }
 
@@ -128,7 +132,7 @@ impl Texture for ImageTexture {
         match self {
             ImageTexture::R8(v) => v.width(),
             ImageTexture::RA8(v) => v.width(),
-            ImageTexture::RGBA8(v) => v.width()
+            ImageTexture::RGBA8(v) => v.width(),
         }
     }
 
@@ -136,7 +140,7 @@ impl Texture for ImageTexture {
         match self {
             ImageTexture::R8(v) => v.height(),
             ImageTexture::RA8(v) => v.height(),
-            ImageTexture::RGBA8(v) => v.height()
+            ImageTexture::RGBA8(v) => v.height(),
         }
     }
 }
@@ -146,7 +150,7 @@ pub struct OutputTexture {
     width: u32,
     height: u32,
     format: Format,
-    data: Box<[u8]>
+    data: Box<[u8]>,
 }
 
 impl OutputTexture {
@@ -168,37 +172,38 @@ impl OutputTexture {
     }
 
     pub fn set(&mut self, pos: Point2<u32>, texel: Texel) -> bool {
-        let offset = self.base_offset(pos.x, pos.y)
+        let offset = self
+            .base_offset(pos.x, pos.y)
             .expect("Illegal output render target position");
         match (self.format, texel) {
             (Format::L8, Texel::L8(l)) => {
                 self.data[offset as usize] = l;
                 true
-            },
+            }
             (Format::LA8, Texel::LA8(l, a)) => {
                 self.data[offset as usize] = l;
                 self.data[offset as usize] = a;
                 true
-            },
+            }
             (Format::RGBA8, Texel::RGBA8(r, g, b, a)) => {
                 self.data[offset as usize] = r;
                 self.data[(offset + 1) as usize] = g;
                 self.data[(offset + 2) as usize] = b;
                 self.data[(offset + 3) as usize] = a;
                 true
-            },
+            }
             (Format::RGBAF32, Texel::RGBAF32(r, g, b, a)) => {
                 LittleEndian::write_f32(&mut self.data[offset as usize..], r);
                 LittleEndian::write_f32(&mut self.data[(offset + 4) as usize..], g);
                 LittleEndian::write_f32(&mut self.data[(offset + 8) as usize..], b);
                 LittleEndian::write_f32(&mut self.data[(offset + 12) as usize..], a);
                 true
-            },
+            }
             (Format::F32, Texel::F32(v)) => {
                 LittleEndian::write_f32(&mut self.data[offset as usize..], v);
                 true
-            },
-            (_, _) => false
+            }
+            (_, _) => false,
         }
     }
 
@@ -219,19 +224,27 @@ impl OutputTexture {
         match self.format {
             Format::L8 => self.assume_rgba_compat(),
             Format::LA8 => self.assume_rgba_compat(),
-            Format::RGBA8 => RgbaImage::from_raw(self.width, self.height, self.data.to_vec()).unwrap(),
+            Format::RGBA8 => {
+                RgbaImage::from_raw(self.width, self.height, self.data.to_vec()).unwrap()
+            }
             Format::RGBAF32 => {
                 let mut image = RgbaImage::new(self.width, self.height);
                 image.enumerate_pixels_mut().for_each(|(x, y, v)| {
-                    let vec = self.get(Point2::new(x, y)).unwrap().normalize().map(|v| v as u8);
+                    let vec = self
+                        .get(Point2::new(x, y))
+                        .unwrap()
+                        .normalize()
+                        .map(|v| v as u8);
                     v[0] = vec.x;
                     v[1] = vec.y;
                     v[2] = vec.z;
                     v[3] = vec.w;
                 });
                 image
-            },
-            Format::F32 => RgbaImage::from_raw(self.width, self.height, self.data.to_vec()).unwrap()
+            }
+            Format::F32 => {
+                RgbaImage::from_raw(self.width, self.height, self.data.to_vec()).unwrap()
+            }
         }
     }
 }
@@ -261,10 +274,12 @@ impl Texture for OutputTexture {
                 let g = &self.data[(offset + 4) as usize..];
                 let b = &self.data[(offset + 8) as usize..];
                 let a = &self.data[(offset + 12) as usize..];
-                Texel::RGBAF32(LittleEndian::read_f32(r),
-                               LittleEndian::read_f32(g),
-                               LittleEndian::read_f32(b),
-                               LittleEndian::read_f32(a))
+                Texel::RGBAF32(
+                    LittleEndian::read_f32(r),
+                    LittleEndian::read_f32(g),
+                    LittleEndian::read_f32(b),
+                    LittleEndian::read_f32(a),
+                )
             }
             Format::F32 => {
                 let v = &self.data[offset as usize..];
