@@ -152,15 +152,10 @@ impl Pipeline {
         }
     }
 
+    #[instrument(level = "debug", skip(self), fields(render_pass=self.cur_pass))]
     pub fn next_pass(&mut self) -> rlua::Result<()> {
         assert!(self.cur_pass < self.scripts.len()); //Make sure we're not gonna jump into a
                                                      // non-existent pass
-        let _span = span!(
-            Level::DEBUG,
-            "Next render pass",
-            render_pass = self.cur_pass
-        )
-        .entered();
         let mut render_target = self.swap_chain.next();
         let previous = if self.cur_pass == 0 {
             None

@@ -14,7 +14,7 @@ categories = []
 
 [dependencies]
 image = "0.24.1"
-bp3d-lua = { path = "../lua", features = ["vector", "math"] }
+bp3d-lua = { path = "../tools.lua/", features = ["vector", "math"] }
 toml = "0.5.8"
 serde = { version = "1.0.136", features = ["derive"] }
 bp3d-threads = "1.1.0"
@@ -24,7 +24,7 @@ nalgebra = "0.30.1"
 os_str_bytes = "6.0.0"
 bstr = "0.2.17"
 tracing = "0.1.33"
-bp3d-tracing = { path = "../tracing" }
+bp3d-tracing = { path = "../debug.tracing/" }
 byteorder = "1.4.3"
 rlua = "0.19.1"
 crossbeam = "0.8.1"

@@ -118,7 +118,7 @@ fn run() -> i32 {
 
 fn main() {
     let code = {
-        let _guard = bp3d_tracing::initialize("bp3d-sdk");
+        bp3d_tracing::setup!("bp3d-sdk");
         run()
     };
     std::process::exit(code);
