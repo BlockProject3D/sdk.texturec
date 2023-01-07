@@ -26,9 +26,10 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::borrow::Cow;
 use crate::math::{Vec2f, Vec3f, Vec4f};
 use crate::template::{Template, Type};
-use crate::texture::ImageTexture;
+use crate::texture::{DynamicTexture, ImageTexture};
 use bstr::ByteSlice;
 use image::io::Reader;
 use os_str_bytes::OsStrBytes;
@@ -69,13 +70,86 @@ pub enum Error {
 }
 
 pub enum Parameter {
-    Texture(Arc<ImageTexture>),
+    Texture(Arc<DynamicTexture>),
     Float(f64),
     Bool(bool),
     Int(i64),
     Vector2(Vec2f),
     Vector3(Vec3f),
     Vector4(Vec4f),
+    String(String)
+}
+
+impl Parameter {
+    pub fn as_texture(&self) -> Option<&Arc<DynamicTexture>> {
+        match self {
+            Parameter::Texture(v) => Some(v),
+            _ => None
+        }
+    }
+
+    pub fn as_float(&self) -> Option<f64> {
+        match self {
+            Parameter::Float(v) => Some(*v),
+            _ => None
+        }
+    }
+
+    pub fn as_int(&self) -> Option<i64> {
+        match self {
+            Parameter::Int(v) => Some(*v),
+            _ => None
+        }
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Parameter::Bool(v) => Some(*v),
+            _ => None
+        }
+    }
+
+    pub fn as_vec2(&self) -> Option<&Vec2f> {
+        match self {
+            Parameter::Vector2(v) => Some(v),
+            _ => None
+        }
+    }
+
+    pub fn as_vec3(&self) -> Option<&Vec3f> {
+        match self {
+            Parameter::Vector3(v) => Some(v),
+            _ => None
+        }
+    }
+
+    pub fn as_vec4(&self) -> Option<&Vec4f> {
+        match self {
+            Parameter::Vector4(v) => Some(v),
+            _ => None
+        }
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Parameter::String(v) => Some(v),
+            _ => None
+        }
+    }
+}
+
+pub struct ParameterMap {
+    content: HashMap<Cow<'static, str>, Parameter>
+}
+
+impl ParameterMap {
+    pub fn set(&mut self, name: Cow<'static, str>, par: Parameter) {
+        self.content.insert(name, par);
+    }
+
+    pub fn get(&self, name: &str) -> Option<&Parameter> {
+        self.content.get(name)
+    }
 }
 
 pub struct Parameters {
@@ -106,7 +180,7 @@ impl Parameters {
                                     .map_err(|e| Error::Image(ImageError::Io(e)))?
                                     .decode()
                                     .map_err(|e| Error::Image(ImageError::Image(e)))?;
-                            Parameter::Texture(Arc::new(ImageTexture::new(image)))
+                            Parameter::Texture(Arc::new(ImageTexture::new(image).into()))
                         }
                         Type::Float => Parameter::Float(
                             std::str::from_utf8(value)

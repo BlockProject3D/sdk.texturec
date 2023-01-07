@@ -18,9 +18,9 @@ bp3d-lua = { path = "../tools.lua/", features = ["vector", "math"] }
 toml = "0.5.8"
 serde = { version = "1.0.136", features = ["derive"] }
 bp3d-threads = "1.1.0"
-clap = "3.1.6"
+clap = "4.0.32"
 thiserror = "1.0.30"
-nalgebra = "0.30.1"
+nalgebra = "0.31.4"
 os_str_bytes = "6.0.0"
 bstr = "0.2.17"
 tracing = "0.1.33"

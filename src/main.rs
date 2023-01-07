@@ -26,11 +26,14 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use clap::{Arg, Command};
+use std::ffi::{OsStr, OsString};
+use clap::{Arg, ArgAction, Command, value_parser};
 use std::path::Path;
+use std::path::PathBuf;
 //use log::{info, LevelFilter};
 use crate::swapchain::SwapChain;
 use tracing::{debug, info};
+use crate::texture::Format;
 
 mod lua;
 mod math;
@@ -39,6 +42,7 @@ mod pipeline;
 mod swapchain;
 mod template;
 mod texture;
+mod filter;
 
 const PROG_NAME: &str = env!("CARGO_PKG_NAME");
 const PROG_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -55,7 +59,11 @@ macro_rules! etry {
     };
 }
 
-fn run() -> i32 {
+fn run() {
+
+}
+
+fn main() {
     let matches = Command::new(PROG_NAME)
         .author("BlockProject 3D")
         .about("BlockProject 3D SDK - Shader Compiler")
@@ -63,32 +71,86 @@ fn run() -> i32 {
         .args([
             Arg::new("debug").short('d').long("debug")
                 .help("Enable debug PNG output"),
-            Arg::new("template").short('t').long("--template").allow_invalid_utf8(true).takes_value(true).required(true)
-                .help("Specify the texture template"),
-            Arg::new("output").short('o').long("output").takes_value(true)
-                .allow_invalid_utf8(true).help("Output texture file name"),
-            Arg::new("threads").short('n').long("threads").takes_value(true)
+            Arg::new("output").short('o').long("output").num_args(1)
+                .value_parser(value_parser!(PathBuf)).help("Output texture file name"),
+            Arg::new("threads").short('n').long("threads").num_args(1)
                 .help("Specify the maximum number of threads to use when processing shaders"),
-            Arg::new("width").long("width").takes_value(true)
+            Arg::new("format").short('f').long("format")
+                .value_parser(["l8", "la8", "rgba8", "rgba32", "f32"]).num_args(1)
+                .help("Override output texture format"),
+            Arg::new("width").long("width").num_args(1)
                 .help("Override output texture width"),
-            Arg::new("height").long("height").takes_value(true)
+            Arg::new("height").long("height").num_args(1)
                 .help("Override output texture height"),
-            Arg::new("parameter").short('p').long("parameter").takes_value(true).multiple_occurrences(true).allow_invalid_utf8(true)
+            Arg::new("filter").long("filter").short('t').num_args(1)
+                .action(ArgAction::Append).help("Adds a filter to apply").required(true),
+            Arg::new("parameter").short('p').long("parameter").action(ArgAction::Append)
+                .num_args(2).value_parser(value_parser!(OsString))
+                .help("Specify a template parameter using the syntax <parameter name> <parameter value>")
+        ]).get_matches();
+    let filters = matches.get_many::<String>("filter").unwrap().map(|v| &**v);
+    let fuckingrust = matches.get_many::<OsString>("parameter")
+        .map(|v| v.map(|v| &**v).collect::<Vec<&OsStr>>());
+    let new_params = fuckingrust.as_deref().map(|v| v.chunks_exact(2).map(|v| {
+        match v[0].to_str() {
+            Some(k) => (k, &*v[1]),
+            None => {
+                eprintln!("One ore more parameters have non-UTF8 characters in the name");
+                std::process::exit(1);
+            }
+        }
+    }));
+    let format = matches.get_one::<String>("format").map(|v| match &**v {
+        "l8" => Format::L8,
+        "la8" => Format::LA8,
+        "rgba8" => Format::RGBA8,
+        "rgba32" => Format::RGBAF32,
+        "f32" => Format::F32,
+        _ => unreachable!()
+    });
+
+}
+
+/*fn run() -> i32 {
+    let matches = Command::new(PROG_NAME)
+        .author("BlockProject 3D")
+        .about("BlockProject 3D SDK - Shader Compiler")
+        .version(PROG_VERSION)
+        .args([
+            Arg::new("debug").short('d').long("debug")
+                .help("Enable debug PNG output"),
+            Arg::new("template").short('t').long("template")
+                .value_parser(value_parser!(PathBuf)).num_args(1).required(true)
+                .help("Specify the texture template"),
+            Arg::new("output").short('o').long("output").num_args(1)
+                .value_parser(value_parser!(PathBuf)).help("Output texture file name"),
+            Arg::new("threads").short('n').long("threads").num_args(1)
+                .help("Specify the maximum number of threads to use when processing shaders"),
+            Arg::new("width").long("width").num_args(1)
+                .help("Override output texture width"),
+            Arg::new("height").long("height").num_args(1)
+                .help("Override output texture height"),
+            Arg::new("parameter").short('p').long("parameter").action(ArgAction::Append)
+                .num_args(2).value_parser(value_parser!(OsString))
                 .help("Specify a template parameter using the syntax <parameter name>=<parameter value>")
         ]).get_matches();
-    let template_path = matches.value_of_os("template").map(Path::new).unwrap();
+    let template_path = matches.get_one::<PathBuf>("template").map(|v| &**v).unwrap();
     info!("Loading template {:?}...", template_path);
     let template = etry!(("failed to load template" 1) =>
         template::Template::load(template_path));
+    //Yet another variable which has no meaning
+    let fuckingrust = matches.get_many::<OsString>("parameter")
+        .map(|v| v.map(|v| &**v).collect::<Vec<&OsStr>>());
+    let new_params = fuckingrust.as_deref().map(|v| v.chunks_exact(2).map(|v| (v[0].to_str(), &*v[1])));
     let params = etry!(("failed to parse parameters" 1) =>
-        params::Parameters::parse(&template, matches.values_of_os("parameter")));
+        params::Parameters::parse(&template, matches.get_many::<OsString>("parameter").map(|v| v.map(|v| &**v))));
     let width: u32 = matches
-        .value_of_t("width")
-        .or_else(|_| template.try_width_from_base_texture(&params).ok_or(()))
+        .get_one("width").map(|v| *v)
+        .or_else(|| template.try_width_from_base_texture(&params))
         .unwrap_or(template.default_width);
     let height: u32 = matches
-        .value_of_t("height")
-        .or_else(|_| template.try_height_from_base_texture(&params).ok_or(()))
+        .get_one("height").map(|v| *v)
+        .or_else(|| template.try_height_from_base_texture(&params))
         .unwrap_or(template.default_height);
     info!(width, height, format = ?template.format, "Creating new swap chain...");
     let chain = SwapChain::new(width, height, template.format);
@@ -101,13 +163,13 @@ fn run() -> i32 {
         scripts,
         params,
         chain,
-        matches.value_of_t("threads").unwrap_or(1),
+        matches.get_one("threads").map(|v| *v).unwrap_or(1),
     );
     for _ in 0..pass_count {
         etry!(("failed to run pass" 1) => pipeline.next_pass());
     }
     let render_target = pipeline.finish();
-    if matches.is_present("debug") {
+    if matches.contains_id("debug") {
         info!("Writing debug output image...");
         etry!(("failed to save debug image" 1) => render_target.to_rgba_lossy().save("debug.png"));
     }
@@ -122,4 +184,4 @@ fn main() {
         run()
     };
     std::process::exit(code);
-}
+}*/

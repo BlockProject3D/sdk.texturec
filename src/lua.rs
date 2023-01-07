@@ -264,6 +264,8 @@ impl UserData for LuaParameters {
                     Parameter::Vector2(v) => LuaVec2::from(*v).to_lua(ctx),
                     Parameter::Vector3(v) => LuaVec3::from(*v).to_lua(ctx),
                     Parameter::Vector4(v) => LuaVec4::from(*v).to_lua(ctx),
+                    //ToLua is supposed to be implemented for &'a str but apparently not because Rust wants a clone at all costs...
+                    Parameter::String(v) => v.clone().to_lua(ctx)
                 })
                 .transpose()
         })

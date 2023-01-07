@@ -27,10 +27,44 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use crate::math::{Vec2f, Vec4f};
-use crate::template::Format;
 use byteorder::{ByteOrder, LittleEndian};
 use image::{DynamicImage, GrayAlphaImage, GrayImage, RgbaImage};
 use nalgebra::Point2;
+//TODO: Remove once everything is moved to a Lua filter.
+use crate::template::Format as TextureFormat;
+
+/// Enum for supported texture formats.
+#[derive(Debug, Copy, Clone)]
+pub enum Format {
+    /// 8 bits greyscale (8bpp).
+    L8,
+
+    /// 8 bits greyscale with alpha (16bpp).
+    LA8,
+
+    /// 8 bits RGBA (32bpp).
+    RGBA8,
+
+    /// 32 bits float RGBA (128bpp).
+    RGBAF32,
+
+    /// 32 bits float (32bpp).
+    F32, // No support for RGB textures as these are not efficient and some rendering apis do not even
+    // support loading those natively (ex DX11, etc).
+}
+
+impl Format {
+    pub fn texel_size(&self) -> u32 {
+        //Returns the texel size in bytes
+        match self {
+            Format::L8 => 1,
+            Format::LA8 => 2,
+            Format::RGBA8 => 4,
+            Format::RGBAF32 => 16,
+            Format::F32 => 4,
+        }
+    }
+}
 
 #[derive(Copy, Clone)]
 pub enum Texel {
@@ -71,7 +105,7 @@ pub trait Texture {
     fn get(&self, pos: Point2<u32>) -> Option<Texel>;
 
     /// Gets the texture format.
-    fn format(&self) -> Format;
+    fn format(&self) -> TextureFormat;
 
     /// Gets the texture width.
     fn width(&self) -> u32;
@@ -120,11 +154,11 @@ impl Texture for ImageTexture {
         }
     }
 
-    fn format(&self) -> Format {
+    fn format(&self) -> TextureFormat {
         match self {
-            ImageTexture::R8(_) => Format::L8,
-            ImageTexture::RA8(_) => Format::LA8,
-            ImageTexture::RGBA8(_) => Format::RGBA8,
+            ImageTexture::R8(_) => TextureFormat::L8,
+            ImageTexture::RA8(_) => TextureFormat::LA8,
+            ImageTexture::RGBA8(_) => TextureFormat::RGBA8,
         }
     }
 
@@ -149,12 +183,12 @@ impl Texture for ImageTexture {
 pub struct OutputTexture {
     width: u32,
     height: u32,
-    format: Format,
+    format: TextureFormat,
     data: Box<[u8]>,
 }
 
 impl OutputTexture {
-    pub fn new(width: u32, height: u32, format: Format) -> OutputTexture {
+    pub fn new(width: u32, height: u32, format: TextureFormat) -> OutputTexture {
         OutputTexture {
             width,
             height,
@@ -176,30 +210,30 @@ impl OutputTexture {
             .base_offset(pos.x, pos.y)
             .expect("Illegal output render target position");
         match (self.format, texel) {
-            (Format::L8, Texel::L8(l)) => {
+            (TextureFormat::L8, Texel::L8(l)) => {
                 self.data[offset as usize] = l;
                 true
             }
-            (Format::LA8, Texel::LA8(l, a)) => {
+            (TextureFormat::LA8, Texel::LA8(l, a)) => {
                 self.data[offset as usize] = l;
                 self.data[offset as usize] = a;
                 true
             }
-            (Format::RGBA8, Texel::RGBA8(r, g, b, a)) => {
+            (TextureFormat::RGBA8, Texel::RGBA8(r, g, b, a)) => {
                 self.data[offset as usize] = r;
                 self.data[(offset + 1) as usize] = g;
                 self.data[(offset + 2) as usize] = b;
                 self.data[(offset + 3) as usize] = a;
                 true
             }
-            (Format::RGBAF32, Texel::RGBAF32(r, g, b, a)) => {
+            (TextureFormat::RGBAF32, Texel::RGBAF32(r, g, b, a)) => {
                 LittleEndian::write_f32(&mut self.data[offset as usize..], r);
                 LittleEndian::write_f32(&mut self.data[(offset + 4) as usize..], g);
                 LittleEndian::write_f32(&mut self.data[(offset + 8) as usize..], b);
                 LittleEndian::write_f32(&mut self.data[(offset + 12) as usize..], a);
                 true
             }
-            (Format::F32, Texel::F32(v)) => {
+            (TextureFormat::F32, Texel::F32(v)) => {
                 LittleEndian::write_f32(&mut self.data[offset as usize..], v);
                 true
             }
@@ -222,12 +256,12 @@ impl OutputTexture {
     /// Performs a potentially lossy conversion to an 8 bits RGBA image.
     pub fn to_rgba_lossy(self) -> RgbaImage {
         match self.format {
-            Format::L8 => self.assume_rgba_compat(),
-            Format::LA8 => self.assume_rgba_compat(),
-            Format::RGBA8 => {
+            TextureFormat::L8 => self.assume_rgba_compat(),
+            TextureFormat::LA8 => self.assume_rgba_compat(),
+            TextureFormat::RGBA8 => {
                 RgbaImage::from_raw(self.width, self.height, self.data.to_vec()).unwrap()
             }
-            Format::RGBAF32 => {
+            TextureFormat::RGBAF32 => {
                 let mut image = RgbaImage::new(self.width, self.height);
                 image.enumerate_pixels_mut().for_each(|(x, y, v)| {
                     let vec = self
@@ -242,7 +276,7 @@ impl OutputTexture {
                 });
                 image
             }
-            Format::F32 => {
+            TextureFormat::F32 => {
                 RgbaImage::from_raw(self.width, self.height, self.data.to_vec()).unwrap()
             }
         }
@@ -253,23 +287,23 @@ impl Texture for OutputTexture {
     fn get(&self, pos: Point2<u32>) -> Option<Texel> {
         let offset = self.base_offset(pos.x, pos.y)?;
         Some(match self.format {
-            Format::L8 => {
+            TextureFormat::L8 => {
                 let l = self.data[offset as usize];
                 Texel::L8(l)
             }
-            Format::LA8 => {
+            TextureFormat::LA8 => {
                 let l = self.data[offset as usize];
                 let a = self.data[(offset + 1) as usize];
                 Texel::LA8(l, a)
             }
-            Format::RGBA8 => {
+            TextureFormat::RGBA8 => {
                 let r = self.data[offset as usize];
                 let g = self.data[(offset + 1) as usize];
                 let b = self.data[(offset + 2) as usize];
                 let a = self.data[(offset + 3) as usize];
                 Texel::RGBA8(r, g, b, a)
             }
-            Format::RGBAF32 => {
+            TextureFormat::RGBAF32 => {
                 let r = &self.data[offset as usize..];
                 let g = &self.data[(offset + 4) as usize..];
                 let b = &self.data[(offset + 8) as usize..];
@@ -281,14 +315,14 @@ impl Texture for OutputTexture {
                     LittleEndian::read_f32(a),
                 )
             }
-            Format::F32 => {
+            TextureFormat::F32 => {
                 let v = &self.data[offset as usize..];
                 Texel::F32(LittleEndian::read_f32(v))
             }
         })
     }
 
-    fn format(&self) -> Format {
+    fn format(&self) -> TextureFormat {
         self.format
     }
 
@@ -298,5 +332,52 @@ impl Texture for OutputTexture {
 
     fn height(&self) -> u32 {
         self.height
+    }
+}
+
+pub enum DynamicTexture {
+    Output(OutputTexture),
+    Image(ImageTexture)
+}
+
+impl From<OutputTexture> for DynamicTexture {
+    fn from(value: OutputTexture) -> Self {
+        DynamicTexture::Output(value)
+    }
+}
+
+impl From<ImageTexture> for DynamicTexture {
+    fn from(value: ImageTexture) -> Self {
+        DynamicTexture::Image(value)
+    }
+}
+
+impl Texture for DynamicTexture {
+    fn get(&self, pos: Point2<u32>) -> Option<Texel> {
+        match self {
+            DynamicTexture::Output(v) => v.get(pos),
+            DynamicTexture::Image(v) => v.get(pos),
+        }
+    }
+
+    fn format(&self) -> TextureFormat {
+        match self {
+            DynamicTexture::Output(v) => v.format(),
+            DynamicTexture::Image(v) => v.format(),
+        }
+    }
+
+    fn width(&self) -> u32 {
+        match self {
+            DynamicTexture::Output(v) => v.width(),
+            DynamicTexture::Image(v) => v.width(),
+        }
+    }
+
+    fn height(&self) -> u32 {
+        match self {
+            DynamicTexture::Output(v) => v.height(),
+            DynamicTexture::Image(v) => v.height(),
+        }
     }
 }
