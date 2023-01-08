@@ -71,12 +71,37 @@ fn list_filters() -> io::Result<Vec<String>> {
 fn write_file(filters: Vec<String>, out_file: &Path) -> io::Result<()> {
     let mut file = BufWriter::new(File::create(out_file)?);
     let module_imports: Vec<String> = filters.iter().map(|v| format!("mod {};", v)).collect();
-    let variants: Vec<String> = filters.iter()
+    let variants = filters.iter()
+        .map(|v| snake_case_to_pascal_case(v))
+        .collect::<Vec<String>>().join(",");
+    let variants_filter: Vec<String> = filters.iter()
         .map(|v| (v, snake_case_to_pascal_case(v)))
         .map(|(module, obj)| format!("{}({}::{}),", obj, module, obj)).collect();
+    let variants_function: Vec<String> = filters.iter()
+        .map(|v| (v, snake_case_to_pascal_case(v)))
+        .map(|(module, obj)| format!("{}(<{}::{} as crate::filter::Filter>::Function),", obj, module, obj)).collect();
+    let variants_from_name: Vec<String> = filters.iter()
+        .map(|v| (v, snake_case_to_pascal_case(v)))
+        .map(|(module, obj)| format!("\"{}\" => Some(<{}::{} as crate::filter::New>::new(params)),", module, module, obj)).collect();
     writeln!(file, "{}", module_imports.join("\n"))?;
     writeln!(file, "pub enum DynamicFilter {{")?;
-    writeln!(file, "    {}", variants.join("\n"))?;
+    writeln!(file, "    {}", variants_filter.join("\n"))?;
+    writeln!(file, "}}")?;
+    writeln!(file, "")?;
+    writeln!(file, "pub enum DynamicFunction {{")?;
+    writeln!(file, "    {}", variants_function.join("\n"))?;
+    writeln!(file, "}}")?;
+    writeln!(file, "")?;
+    writeln!(file, "impl_function!(DynamicFunction {{ {} }});", variants)?;
+    writeln!(file, "impl_filter!((DynamicFilter, DynamicFunction) {{ {} }});", variants)?;
+    writeln!(file, "")?;
+    writeln!(file, "impl DynamicFilter {{")?;
+    writeln!(file, "    pub fn from_name(params: &ParameterMap, name: &str) -> Option<Result<DynamicFilter, FilterError>> {{")?;
+    writeln!(file, "        match name {{")?;
+    writeln!(file, "            {}", variants_from_name.join(",\n"))?;
+    writeln!(file, "            _ => None")?;
+    writeln!(file, "        }}")?;
+    writeln!(file, "    }}")?;
     writeln!(file, "}}")?;
     Ok(())
 }
