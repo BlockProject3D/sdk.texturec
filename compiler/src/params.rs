@@ -138,17 +138,51 @@ impl Parameter {
     }
 }
 
+#[derive(Default)]
 pub struct ParameterMap {
-    content: HashMap<Cow<'static, str>, Parameter>
+    content: HashMap<String, Parameter>
 }
 
 impl ParameterMap {
-    pub fn parse<'a>(params: Option<impl Iterator<Item = (&'a str, &'a OsStr)>>) -> Result<Parameters, Error> {
-        todo!()
-    }
-
-    pub fn set(&mut self, name: Cow<'static, str>, param: Parameter) {
-        self.content.insert(name, param);
+    pub fn parse<'a>(params: Option<impl Iterator<Item = (&'a str, &'a OsStr)>>) -> Result<ParameterMap, Error> {
+        if params.is_none() {
+            return Ok(ParameterMap::default())
+        }
+        let params = unsafe { params.unwrap_unchecked() };
+        let mut content = HashMap::new();
+        for (k, v) in params {
+            let path = Path::new(v);
+            if path.is_file() {
+                let image = Reader::open(path)
+                    .map_err(|e| Error::Image(ImageError::Io(e)))?.decode()
+                    .map_err(|e| Error::Image(ImageError::Image(e)))?;
+                content.insert(k.into(), Parameter::Texture(Arc::new(ImageTexture::new(image).into())));
+            } else {
+                let value = v.to_str().ok_or(Error::InvalidUtf8)?;
+                let p = value.parse().map(Parameter::Int)
+                    .or_else(|_| value.parse().map(Parameter::Float))
+                    .or_else(|_| {
+                        let vecsplit: Vec<&str> = value.split(",").collect();
+                        match vecsplit.len() {
+                            2 => Ok(Parameter::Vector2(
+                                Vec2f::new(vecsplit[0].trim().parse().map_err(|_| value.to_owned())?,
+                                           vecsplit[1].trim().parse().map_err(|_| value.to_owned())?))),
+                            3 => Ok(Parameter::Vector3(
+                                Vec3f::new(vecsplit[0].trim().parse().map_err(|_| value.to_owned())?,
+                                           vecsplit[1].trim().parse().map_err(|_| value.to_owned())?,
+                                           vecsplit[2].trim().parse().map_err(|_| value.to_owned())?))),
+                            4 => Ok(Parameter::Vector4(
+                                Vec4f::new(vecsplit[0].trim().parse().map_err(|_| value.to_owned())?,
+                                           vecsplit[1].trim().parse().map_err(|_| value.to_owned())?,
+                                           vecsplit[2].trim().parse().map_err(|_| value.to_owned())?,
+                                           vecsplit[3].trim().parse().map_err(|_| value.to_owned())?))),
+                            _ => Err(value.to_owned())
+                        }
+                    }).unwrap_or_else(Parameter::String);
+                content.insert(k.into(), p);
+            }
+        }
+        Ok(ParameterMap { content })
     }
 
     pub fn get(&self, name: &str) -> Option<&Parameter> {
