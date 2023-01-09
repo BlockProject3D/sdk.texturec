@@ -28,21 +28,40 @@
 
 use std::sync::Arc;
 use nalgebra::Point2;
+use thiserror::Error;
 use crate::params::ParameterMap;
 use crate::texture::{DynamicTexture, Format, Texel};
 
+#[derive(Error, Debug)]
 pub enum FrameBufferError {
+    #[error("this filter requires an input frame buffer")]
     MissingPrevious,
+
+    #[error("this filter does not support the size of the output frame buffer")]
     UnsupportedSize,
+
+    #[error("this filter does not support the format of the output frame buffer")]
     UnsupportedFormat,
+
+    #[error("this filter does not support the size of the input frame buffer")]
     UnsupportedPreviousSize,
+
+    #[error("this filter does not support the format of the input frame buffer")]
     UnsupportedPreviousFormat,
+
+    #[error("generic frame buffer error: {0}")]
     Other(String)
 }
 
+#[derive(Error, Debug)]
 pub enum FilterError {
+    #[error("missing parameter named {0}")]
     MissingParameter(&'static str),
+
+    #[error("invalid parameter named {0}")]
     InvalidParameter(&'static str),
+
+    #[error("generic filter error: {0}")]
     Other(String)
 }
 
