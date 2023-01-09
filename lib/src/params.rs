@@ -143,8 +143,12 @@ pub struct ParameterMap {
 }
 
 impl ParameterMap {
-    pub fn set(&mut self, name: Cow<'static, str>, par: Parameter) {
-        self.content.insert(name, par);
+    pub fn parse<'a>(params: Option<impl Iterator<Item = (&'a str, &'a OsStr)>>) -> Result<Parameters, Error> {
+        todo!()
+    }
+
+    pub fn set(&mut self, name: Cow<'static, str>, param: Parameter) {
+        self.content.insert(name, param);
     }
 
     pub fn get(&self, name: &str) -> Option<&Parameter> {

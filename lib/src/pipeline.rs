@@ -33,7 +33,7 @@ use crate::lua::{
 use crate::params::{Parameters, SharedParameters};
 use crate::template::Format;
 use crate::texture::{OutputTexture, Texel};
-use crate::SwapChain;
+use crate::swapchain::SwapChain;
 use bp3d_lua::math::LibMath;
 use bp3d_lua::number::Checked;
 use bp3d_lua::vector::LibVector;

@@ -31,18 +31,10 @@ use clap::{Arg, ArgAction, Command, value_parser};
 use std::path::Path;
 use std::path::PathBuf;
 //use log::{info, LevelFilter};
-use crate::swapchain::SwapChain;
-use tracing::{debug, info};
-use crate::texture::Format;
-
-mod lua;
-mod math;
-mod params;
-mod pipeline;
-mod swapchain;
-mod template;
-mod texture;
-mod filter;
+//use crate::swapchain::SwapChain;
+//use tracing::{debug, info};
+//use crate::params::ParameterMap;
+use bp3d_texturec::texture::Format;
 
 const PROG_NAME: &str = env!("CARGO_PKG_NAME");
 const PROG_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -57,10 +49,6 @@ macro_rules! etry {
             }
         }
     };
-}
-
-fn run() {
-
 }
 
 fn main() {
@@ -78,10 +66,10 @@ fn main() {
             Arg::new("format").short('f').long("format")
                 .value_parser(["l8", "la8", "rgba8", "rgba32", "f32"]).num_args(1)
                 .help("Override output texture format"),
-            Arg::new("width").long("width").num_args(1)
-                .help("Override output texture width"),
-            Arg::new("height").long("height").num_args(1)
-                .help("Override output texture height"),
+            Arg::new("width").long("width").value_parser(value_parser!(u32))
+                .num_args(1).help("Override output texture width"),
+            Arg::new("height").long("height").value_parser(value_parser!(u32))
+                .num_args(1).help("Override output texture height"),
             Arg::new("filter").long("filter").short('t').num_args(1)
                 .action(ArgAction::Append).help("Adds a filter to apply").required(true),
             Arg::new("parameter").short('p').long("parameter").action(ArgAction::Append)
@@ -91,7 +79,7 @@ fn main() {
     let filters = matches.get_many::<String>("filter").unwrap().map(|v| &**v);
     let fuckingrust = matches.get_many::<OsString>("parameter")
         .map(|v| v.map(|v| &**v).collect::<Vec<&OsStr>>());
-    let new_params = fuckingrust.as_deref().map(|v| v.chunks_exact(2).map(|v| {
+    let params = fuckingrust.as_deref().map(|v| v.chunks_exact(2).map(|v| {
         match v[0].to_str() {
             Some(k) => (k, &*v[1]),
             None => {
@@ -108,6 +96,8 @@ fn main() {
         "f32" => Format::F32,
         _ => unreachable!()
     });
+    let width: Option<u32> = matches.get_one("width").map(|v| *v);
+    let height: Option<u32> = matches.get_one("height").map(|v| *v);
 
 }
 

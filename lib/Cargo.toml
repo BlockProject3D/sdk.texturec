@@ -1,0 +1,30 @@
+[package]
+name = "bp3d-texturec"
+version = "0.1.0"
+authors = ["Yuri Edward <yuri6037@outlook.com>"]
+edition = "2021"
+description = ""
+license = "BSD-3-Clause"
+repository = "https://gitlab.com/bp3d/sdk/texture-compiler"
+readme = "./README.MD"
+keywords = []
+categories = []
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+image = "0.24.1"
+bp3d-lua = { path = "../../tools.lua/", features = ["vector", "math"] }
+toml = "0.5.8"
+serde = { version = "1.0.136", features = ["derive"] }
+bp3d-threads = "1.1.0"
+thiserror = "1.0.30"
+nalgebra = "0.31.4"
+os_str_bytes = "6.0.0"
+bstr = "0.2.17"
+tracing = "0.1.33"
+bp3d-tracing = { path = "../../debug.tracing/" }
+byteorder = "1.4.3"
+rlua = "0.19.1"
+crossbeam = "0.8.1"
+atty = "0.2.14"
