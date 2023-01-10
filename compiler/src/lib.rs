@@ -52,8 +52,11 @@ pub enum AddFilterError<'a> {
     Filter(filter::FilterError)
 }
 
+#[derive(Debug, Error)]
 pub enum Error {
+    #[error("frame buffer error: {0}")]
     FrameBuffer(filter::FrameBufferError),
+    #[error("image error: {0}")]
     Image(ImageError)
 }
 
