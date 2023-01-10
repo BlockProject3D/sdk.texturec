@@ -78,6 +78,11 @@ pub trait Filter {
     /// Attempts to get the ideal texture size for this filter from the given parameters map.
     /// If this filter has no ideal texture size then return None.
     fn get_texture_size(&self) -> Option<(u32, u32)>;
+
+    /// Attempts to get the ideal texture format for this filter from the given parameters map.
+    /// If this filter has no ideal texture format then return None.
+    fn get_texture_format(&self) -> Option<Format>;
+
     fn new_function(&self, frame_buffer: FrameBuffer) -> Result<Self::Function, FrameBufferError>;
 }
 
@@ -98,6 +103,15 @@ macro_rules! impl_filter {
                 match self {
                     $(
                         Self::$name(v) => v.get_texture_size(),
+                    )*
+                    _ => std::unreachable!()
+                }
+            }
+
+            fn get_texture_format(&self) -> Option<Format> {
+                match self {
+                    $(
+                        Self::$name(v) => v.get_texture_format(),
                     )*
                     _ => std::unreachable!()
                 }
