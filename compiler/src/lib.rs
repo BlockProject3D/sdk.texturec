@@ -39,6 +39,9 @@ mod swapchain;
 pub mod texture;
 mod filter;
 
+const DEFAULT_WIDTH: u32 = 256;
+const DEFAULT_HEIGHT: u32 = 256;
+
 #[derive(Debug, Error)]
 pub enum AddFilterError<'a> {
     #[error("parameter error: {0}")]
@@ -55,9 +58,9 @@ pub enum Error {
 }
 
 pub struct Config<'a> {
-    pub width: u32,
-    pub height: u32,
-    pub format: texture::Format,
+    pub width: Option<u32>,
+    pub height: Option<u32>,
+    pub format: Option<texture::Format>,
     pub debug: bool,
     pub n_threads: usize,
     pub output: &'a std::path::Path
@@ -85,8 +88,33 @@ impl<'a> Compiler<'a> {
     }
 
     pub fn run(self) -> Result<(), Error> {
-        info!(width = self.config.width, height = self.config.height, format = ?self.config.format, "Creating new swap chain...");
-        let chain = swapchain::SwapChain::new(self.config.width, self.config.height, self.config.format);
+        use filter::Filter;
+        let mut width = self.config.width;
+        let mut height = self.config.height;
+        let mut format = self.config.format;
+        info!(width, height, ?format, "Creating new swap chain...");
+        if width.is_none() || height.is_none() || format.is_none() {
+            for f in &self.filters {
+                if let Some((w, h)) = f.get_texture_size() {
+                    if width.is_none() {
+                        width = Some(w);
+                    }
+                    if height.is_none() {
+                        height = Some(h);
+                    }
+                }
+                if format.is_none() {
+                    if let Some(f) = f.get_texture_format() {
+                        format = Some(f)
+                    }
+                }
+            }
+        }
+        let chain = swapchain::SwapChain::new(
+            width.unwrap_or(DEFAULT_WIDTH),
+            height.unwrap_or(DEFAULT_HEIGHT),
+            format.unwrap_or(texture::Format::RGBA8)
+        );
         debug!(width = chain.width(), height = chain.height(), format = ?chain.format(), "Created new swap chain");
         let pass_count = self.filters.len();
         let mut pipeline = pipeline::Pipeline::new(self.filters, chain, self.config.n_threads);
