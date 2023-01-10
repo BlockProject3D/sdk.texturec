@@ -26,18 +26,32 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod lua;
+use image::ImageError;
+use thiserror::Error;
+use tracing::{debug, info};
+
+//mod lua;
 mod math;
 pub mod params;
 mod pipeline;
 mod swapchain;
-mod template;
+//mod template;
 pub mod texture;
 mod filter;
 
-pub struct FilterEntry {
-    pub filter: filter::DynamicFilter,
-    pub params: params::ParameterMap
+#[derive(Debug, Error)]
+pub enum AddFilterError<'a> {
+    #[error("parameter error: {0}")]
+    Parameters(params::Error),
+    #[error("unknown filter name: {0}")]
+    Unknown(&'a str),
+    #[error("filter error: {0}")]
+    Filter(filter::FilterError)
+}
+
+pub enum Error {
+    FrameBuffer(filter::FrameBufferError),
+    Image(ImageError)
 }
 
 pub struct Config<'a> {
@@ -51,7 +65,7 @@ pub struct Config<'a> {
 
 pub struct Compiler<'a> {
     config: Config<'a>,
-    filters: Vec<FilterEntry>
+    filters: Vec<filter::DynamicFilter>
 }
 
 impl<'a> Compiler<'a> {
@@ -62,7 +76,30 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub fn add_filter<'a>(&mut self, name: &str, params: impl Iterator<Item = (&'a str, &'a std::ffi::OsStr)>) {
+    pub fn add_filter<'b>(&mut self, name: &'b str, params: Option<impl Iterator<Item = (&'b str, &'b std::ffi::OsStr)>>) -> Result<(), AddFilterError<'b>> {
+        let params = params::ParameterMap::parse(params).map_err(AddFilterError::Parameters)?;
+        let filter = filter::DynamicFilter::from_name(&params, name)
+            .ok_or(AddFilterError::Unknown(name))?.map_err(AddFilterError::Filter)?;
+        self.filters.push(filter);
+        Ok(())
+    }
 
+    pub fn run(self) -> Result<(), Error> {
+        info!(width = self.config.width, height = self.config.height, format = ?self.config.format, "Creating new swap chain...");
+        let chain = swapchain::SwapChain::new(self.config.width, self.config.height, self.config.format);
+        debug!(width = chain.width(), height = chain.height(), format = ?chain.format(), "Created new swap chain");
+        let pass_count = self.filters.len();
+        let mut pipeline = pipeline::Pipeline::new(self.filters, chain, self.config.n_threads);
+        for _ in 0..pass_count {
+            pipeline.next_pass().map_err(Error::FrameBuffer)?;
+        }
+        let render_target = pipeline.finish();
+        if self.config.debug {
+            info!("Writing debug output image...");
+            render_target.to_rgba_lossy().save("debug.png").map_err(Error::Image)?;
+        }
+        //TODO: Mipmaps
+        //TODO: Actual BPX save
+        Ok(())
     }
 }
