@@ -26,27 +26,17 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::lua::{
-    Lib, LuaOutTexel, LuaParameters, LuaTexture, BUFFER_FORMAT, BUFFER_HEIGHT, BUFFER_WIDTH,
-    GLOBAL_BUFFER, GLOBAL_PARAMETERS, GLOBAL_PREVIOUS,
-};
-use crate::params::{Parameters, SharedParameters};
-use crate::template::Format;
-use crate::texture::{OutputTexture, Texel};
+use crate::texture::{Format, OutputTexture, Texel};
 use crate::swapchain::SwapChain;
-use bp3d_lua::math::LibMath;
-use bp3d_lua::number::Checked;
-use bp3d_lua::vector::LibVector;
-use bp3d_lua::LuaEngine;
 use bp3d_threads::{ThreadPool, UnscopedThreadManager};
 use bp3d_tracing::DisableStdoutLogger;
 use crossbeam::queue::ArrayQueue;
 use nalgebra::Point2;
-use rlua::Function;
 use std::io::Write;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-use tracing::{info, instrument, span, warn, Level};
+use tracing::{info, instrument, warn};
+use crate::filter::{DynamicFilter, DynamicFunction, Filter, FrameBuffer, FrameBufferError, Function};
 
 const DISPLAY_INTERVAL: u32 = 2;
 
@@ -58,17 +48,14 @@ fn print_progress(progress: f64) {
 }
 
 struct Task {
-    script_code: Arc<[u8]>,
-    previous: Option<Arc<OutputTexture>>,
-    parameters: SharedParameters,
     format: Format,
     width: u32,
     height: u32,
-    vms: Arc<ArrayQueue<LuaEngine>>,
+    funcs: Arc<ArrayQueue<DynamicFunction>>,
 }
 
 impl Task {
-    fn init_lua_engine(self) -> rlua::Result<(Arc<ArrayQueue<LuaEngine>>, LuaEngine)> {
+    /*fn init_lua_engine(self) -> rlua::Result<(Arc<ArrayQueue<LuaEngine>>, LuaEngine)> {
         match self.vms.pop() {
             Some(v) => Ok((self.vms, v)),
             None => {
@@ -96,40 +83,25 @@ impl Task {
                 Ok((self.vms, engine))
             }
         }
-    }
+    }*/
 
     #[instrument(level = "trace", skip(self, total, intty))]
-    fn run(self, x: u32, y: u32, total: f64, intty: bool) -> rlua::Result<(Point2<u32>, Texel)> {
-        let (vms, engine) = self.init_lua_engine()?;
-        let res = engine
-            .context(|ctx| {
-                let _span = span!(Level::TRACE, "Lua_main").entered();
-                let main: Function = ctx.globals().get("main")?;
-                main.call((x, y))
-            })
-            .map(|v: LuaOutTexel| v.into_inner())
-            .map(|v| (Point2::new(x, y), v));
-        vms.push(engine).ok().unwrap();
-        match res {
-            Ok(v) => {
-                let current = PROCESSED_TEXELS.fetch_add(1, Ordering::Relaxed);
-                if intty && current % DISPLAY_INTERVAL == 0 {
-                    print_progress((current as f64 / total as f64) * 100.0);
-                }
-                Ok(v)
-            }
-            Err(e) => {
-                warn!("script error: {}", e);
-                Err(e)
-            }
+    fn run(self, x: u32, y: u32, total: f64, intty: bool) -> (Point2<u32>, Texel) {
+        let func = self.funcs.pop().unwrap();
+        let pos = Point2::new(x, y);
+        let texel = func.apply(pos);
+        self.funcs.push(func).ok().unwrap();
+        let current = PROCESSED_TEXELS.fetch_add(1, Ordering::Relaxed);
+        if intty && current % DISPLAY_INTERVAL == 0 {
+            print_progress((current as f64 / total as f64) * 100.0);
         }
+        (pos, texel)
     }
 }
 
 pub struct Pipeline {
-    scripts: Vec<Arc<[u8]>>,
+    filters: Vec<DynamicFilter>,
     cur_pass: usize,
-    parameters: SharedParameters,
     swap_chain: SwapChain,
     n_threads: usize,
 }
@@ -138,32 +110,29 @@ static PROCESSED_TEXELS: AtomicU32 = AtomicU32::new(0);
 
 impl Pipeline {
     pub fn new(
-        scripts: Vec<Arc<[u8]>>,
-        parameters: Parameters,
+        filters: Vec<DynamicFilter>,
         swap_chain: SwapChain,
         n_threads: usize,
     ) -> Pipeline {
         Pipeline {
-            scripts,
+            filters,
             cur_pass: 0,
-            parameters: Arc::new(parameters),
             swap_chain,
             n_threads,
         }
     }
 
     #[instrument(level = "debug", skip(self), fields(render_pass=self.cur_pass))]
-    pub fn next_pass(&mut self) -> rlua::Result<()> {
-        assert!(self.cur_pass < self.scripts.len()); //Make sure we're not gonna jump into a
+    pub fn next_pass(&mut self) -> Result<(), FrameBufferError> {
+        assert!(self.cur_pass < self.filters.len()); //Make sure we're not gonna jump into a
                                                      // non-existent pass
         let mut render_target = self.swap_chain.next();
         let previous = if self.cur_pass == 0 {
             None
         } else {
             Some(self.swap_chain.next())
-        }
-        .map(Arc::new);
-        let mut pool: ThreadPool<UnscopedThreadManager, rlua::Result<(Point2<u32>, Texel)>> =
+        }.map(Arc::new);
+        let mut pool: ThreadPool<UnscopedThreadManager, (Point2<u32>, Texel)> =
             ThreadPool::new(self.n_threads);
         let manager = UnscopedThreadManager::new();
         info!(max_threads = self.n_threads, "Initialized thread pool");
@@ -171,7 +140,15 @@ impl Pipeline {
         PROCESSED_TEXELS.store(0, Ordering::Relaxed);
         {
             let total = self.swap_chain.height() * self.swap_chain.width();
-            let vms = Arc::new(ArrayQueue::new(self.n_threads));
+            let funcs = Arc::new(ArrayQueue::new(self.n_threads));
+            for _ in 0..self.n_threads {
+                funcs.push(self.filters[self.cur_pass].new_function(FrameBuffer {
+                    previous: previous.clone(),
+                    width: self.swap_chain.width(),
+                    height: self.swap_chain.height(),
+                    format: self.swap_chain.format()
+                })?).ok().unwrap();
+            }
             let intty = atty::is(atty::Stream::Stdout);
             let _guard = match intty {
                 true => {
@@ -184,19 +161,15 @@ impl Pipeline {
             for y in 0..self.swap_chain.height() {
                 for x in 0..self.swap_chain.width() {
                     let task = Task {
-                        script_code: self.scripts[self.cur_pass].clone(),
-                        previous: previous.clone(),
-                        parameters: self.parameters.clone(),
                         format: self.swap_chain.format(),
                         width: self.swap_chain.width(),
                         height: self.swap_chain.height(),
-                        vms: vms.clone(),
+                        funcs: funcs.clone(),
                     };
                     pool.send(&manager, move |_| task.run(x, y, total as _, intty));
                 }
             }
-            for task in pool.reduce().map(|v| v.unwrap()) {
-                let (pos, texel) = task?;
+            for (pos, texel) in pool.reduce().map(|v| v.unwrap()) {
                 if !render_target.set(pos, texel) {
                     warn!(?pos, expected_format = ?self.swap_chain.format(), "Ignored texel due to format mismatch");
                 }

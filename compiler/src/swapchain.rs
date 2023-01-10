@@ -26,8 +26,7 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::template::Format;
-use crate::texture::OutputTexture;
+use crate::texture::{Format, OutputTexture};
 
 const SWAP_CHAIN_LEN: usize = 2;
 

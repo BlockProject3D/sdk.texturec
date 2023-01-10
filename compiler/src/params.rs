@@ -26,13 +26,9 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::borrow::Cow;
 use crate::math::{Vec2f, Vec3f, Vec4f};
-use crate::template::{Template, Type};
-use crate::texture::{DynamicTexture, ImageTexture};
-use bstr::ByteSlice;
+use crate::texture::{ImageTexture, Texture};
 use image::io::Reader;
-use os_str_bytes::OsStrBytes;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::Path;
@@ -69,19 +65,19 @@ pub enum Error {
     Image(ImageError),
 }
 
-pub enum Parameter {
-    Texture(Arc<DynamicTexture>),
+pub enum Parameter<'a> {
+    Texture(Arc<ImageTexture>),
     Float(f64),
     Bool(bool),
     Int(i64),
     Vector2(Vec2f),
     Vector3(Vec3f),
     Vector4(Vec4f),
-    String(String)
+    String(&'a str)
 }
 
-impl Parameter {
-    pub fn as_texture(&self) -> Option<&Arc<DynamicTexture>> {
+impl<'a> Parameter<'a> {
+    pub fn as_texture(&self) -> Option<&Arc<ImageTexture>> {
         match self {
             Parameter::Texture(v) => Some(v),
             _ => None
@@ -139,12 +135,12 @@ impl Parameter {
 }
 
 #[derive(Default)]
-pub struct ParameterMap {
-    content: HashMap<String, Parameter>
+pub struct ParameterMap<'a> {
+    content: HashMap<&'a str, Parameter<'a>>
 }
 
-impl ParameterMap {
-    pub fn parse<'a>(params: Option<impl Iterator<Item = (&'a str, &'a OsStr)>>) -> Result<ParameterMap, Error> {
+impl<'a> ParameterMap<'a> {
+    pub fn parse(params: Option<impl Iterator<Item = (&'a str, &'a OsStr)>>) -> Result<ParameterMap<'a>, Error> {
         if params.is_none() {
             return Ok(ParameterMap::default())
         }
@@ -156,7 +152,7 @@ impl ParameterMap {
                 let image = Reader::open(path)
                     .map_err(|e| Error::Image(ImageError::Io(e)))?.decode()
                     .map_err(|e| Error::Image(ImageError::Image(e)))?;
-                content.insert(k.into(), Parameter::Texture(Arc::new(ImageTexture::new(image).into())));
+                content.insert(k.into(), Parameter::Texture(Arc::new(ImageTexture::new(image))));
             } else {
                 let value = v.to_str().ok_or(Error::InvalidUtf8)?;
                 let p = value.parse().map(Parameter::Int)
@@ -165,21 +161,21 @@ impl ParameterMap {
                         let vecsplit: Vec<&str> = value.split(",").collect();
                         match vecsplit.len() {
                             2 => Ok(Parameter::Vector2(
-                                Vec2f::new(vecsplit[0].trim().parse().map_err(|_| value.to_owned())?,
-                                           vecsplit[1].trim().parse().map_err(|_| value.to_owned())?))),
+                                Vec2f::new(vecsplit[0].trim().parse().map_err(|_| value)?,
+                                           vecsplit[1].trim().parse().map_err(|_| value)?))),
                             3 => Ok(Parameter::Vector3(
-                                Vec3f::new(vecsplit[0].trim().parse().map_err(|_| value.to_owned())?,
-                                           vecsplit[1].trim().parse().map_err(|_| value.to_owned())?,
-                                           vecsplit[2].trim().parse().map_err(|_| value.to_owned())?))),
+                                Vec3f::new(vecsplit[0].trim().parse().map_err(|_| value)?,
+                                           vecsplit[1].trim().parse().map_err(|_| value)?,
+                                           vecsplit[2].trim().parse().map_err(|_| value)?))),
                             4 => Ok(Parameter::Vector4(
-                                Vec4f::new(vecsplit[0].trim().parse().map_err(|_| value.to_owned())?,
-                                           vecsplit[1].trim().parse().map_err(|_| value.to_owned())?,
-                                           vecsplit[2].trim().parse().map_err(|_| value.to_owned())?,
-                                           vecsplit[3].trim().parse().map_err(|_| value.to_owned())?))),
-                            _ => Err(value.to_owned())
+                                Vec4f::new(vecsplit[0].trim().parse().map_err(|_| value)?,
+                                           vecsplit[1].trim().parse().map_err(|_| value)?,
+                                           vecsplit[2].trim().parse().map_err(|_| value)?,
+                                           vecsplit[3].trim().parse().map_err(|_| value)?))),
+                            _ => Err(value)
                         }
                     }).unwrap_or_else(Parameter::String);
-                content.insert(k.into(), p);
+                content.insert(k, p);
             }
         }
         Ok(ParameterMap { content })
@@ -190,7 +186,7 @@ impl ParameterMap {
     }
 }
 
-pub struct Parameters {
+/*pub struct Parameters {
     content: Option<HashMap<String, Parameter>>,
 }
 
@@ -318,4 +314,4 @@ impl Parameters {
     }
 }
 
-pub type SharedParameters = Arc<Parameters>;
+pub type SharedParameters = Arc<Parameters>;*/

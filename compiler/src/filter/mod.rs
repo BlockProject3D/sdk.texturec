@@ -30,7 +30,7 @@ use std::sync::Arc;
 use nalgebra::Point2;
 use thiserror::Error;
 use crate::params::ParameterMap;
-use crate::texture::{DynamicTexture, Format, Texel};
+use crate::texture::{Format, OutputTexture, Texel, Texture};
 
 #[derive(Error, Debug)]
 pub enum FrameBufferError {
@@ -66,11 +66,10 @@ pub enum FilterError {
 }
 
 pub struct FrameBuffer {
-    previous: Option<Arc<DynamicTexture>>,
-    data: Arc<DynamicTexture>,
-    width: u32,
-    height: u32,
-    format: Format
+    pub previous: Option<Arc<OutputTexture>>,
+    pub width: u32,
+    pub height: u32,
+    pub format: Format
 }
 
 pub trait Filter {
