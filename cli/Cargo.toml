@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 clap = "4.0.32"
 bp3d-texturec = { path = "../compiler" }
+bp3d-tracing = { path = "../../debug.tracing" }

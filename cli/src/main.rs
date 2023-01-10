@@ -30,6 +30,7 @@ use std::ffi::{OsStr, OsString};
 use clap::{Arg, ArgAction, Command, value_parser};
 use std::path::Path;
 use std::path::PathBuf;
+use bp3d_texturec::{Compiler, Config};
 //use log::{info, LevelFilter};
 //use crate::swapchain::SwapChain;
 //use tracing::{debug, info};
@@ -76,6 +77,7 @@ fn main() {
                 .num_args(2).value_parser(value_parser!(OsString))
                 .help("Specify a template parameter using the syntax <parameter name> <parameter value>")
         ]).get_matches();
+    let output: &Path = matches.get_one::<PathBuf>("output").map(|v| &**v).unwrap_or(Path::new("a.out.bpx"));
     let filters = matches.get_many::<String>("filter").unwrap().map(|v| &**v);
     let fuckingrust = matches.get_many::<OsString>("parameter")
         .map(|v| v.map(|v| &**v).collect::<Vec<&OsStr>>());
@@ -98,6 +100,16 @@ fn main() {
     });
     let width: Option<u32> = matches.get_one("width").map(|v| *v);
     let height: Option<u32> = matches.get_one("height").map(|v| *v);
+    let n_threads: usize = matches.get_one("threads").map(|v| *v).unwrap_or(1);
+    bp3d_tracing::setup!("bp3d-sdk");
+    let compiler = Compiler::new(Config {
+        n_threads,
+        width,
+        height,
+        format,
+        debug: matches.contains_id("debug"),
+        output
+    });
 
 }
 
