@@ -99,7 +99,7 @@ fn write_file(filters: Vec<String>, out_file: &Path) -> io::Result<()> {
     writeln!(file, "impl DynamicFilter {{")?;
     writeln!(file, "    pub fn from_name(params: &ParameterMap, name: &str) -> Option<Result<DynamicFilter, FilterError>> {{")?;
     writeln!(file, "        match name {{")?;
-    writeln!(file, "            {}", variants_from_name.join(",\n"))?;
+    writeln!(file, "            {},", variants_from_name.join(",\n"))?;
     writeln!(file, "            _ => None")?;
     writeln!(file, "        }}")?;
     writeln!(file, "    }}")?;
