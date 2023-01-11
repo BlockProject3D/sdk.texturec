@@ -26,26 +26,23 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::texture::{Format, OutputTexture, Texel};
+use crate::texture::{OutputTexture, Texel};
 use crate::swapchain::SwapChain;
 use bp3d_threads::{ThreadPool, UnscopedThreadManager};
-use bp3d_tracing::DisableStdoutLogger;
 use crossbeam::queue::ArrayQueue;
 use nalgebra::Point2;
-use std::io::Write;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tracing::{info, instrument, warn};
 use crate::filter::{DynamicFilter, DynamicFunction, Filter, FrameBuffer, FrameBufferError, Function};
 
-const DISPLAY_INTERVAL: u32 = 2;
+/*const DISPLAY_INTERVAL: u32 = 2;
 
 fn print_progress(progress: f64) {
     let useless = std::io::stdout();
     let mut lock = useless.lock();
     write!(lock, "\r{:.2}% done...", progress).unwrap();
     lock.flush().unwrap();
-}
+}*/
 
 pub trait PassDelegate: Send + Sync + 'static {
     fn on_start_texel(&self, x: u32, y: u32);
@@ -107,8 +104,8 @@ impl<D: PassDelegate> Task<D> {
         }
     }*/
 
-    #[instrument(level = "trace", fields(render_pass=self.render_pass), skip(self, total, intty))]
-    fn run(self, x: u32, y: u32, total: f64, intty: bool) -> (Point2<u32>, Texel) {
+    #[instrument(level = "trace", fields(render_pass=self.render_pass), skip(self))]
+    fn run(self, x: u32, y: u32) -> (Point2<u32>, Texel) {
         if let Some(delegate) = &self.delegate {
             delegate.on_start_texel(x, y);
         }
@@ -119,10 +116,10 @@ impl<D: PassDelegate> Task<D> {
         if let Some(delegate) = &self.delegate {
             delegate.on_end_texel();
         }
-        let current = PROCESSED_TEXELS.fetch_add(1, Ordering::Relaxed);
+        /*let current = PROCESSED_TEXELS.fetch_add(1, Ordering::Relaxed);
         if intty && current % DISPLAY_INTERVAL == 0 {
             print_progress((current as f64 / total as f64) * 100.0);
-        }
+        }*/
         (pos, texel)
     }
 }
@@ -135,7 +132,7 @@ pub struct Pipeline<D> {
     delegate: Option<D>
 }
 
-static PROCESSED_TEXELS: AtomicU32 = AtomicU32::new(0);
+//static PROCESSED_TEXELS: AtomicU32 = AtomicU32::new(0);
 
 impl<D: PipelineDelegate> Pipeline<D> {
     pub fn new(filters: Vec<DynamicFilter>, swap_chain: SwapChain, n_threads: usize, delegate: Option<D>) -> Pipeline<D> {
@@ -163,7 +160,7 @@ impl<D: PipelineDelegate> Pipeline<D> {
         let manager = UnscopedThreadManager::new();
         info!(max_threads = self.n_threads, "Initialized thread pool");
         //At this point we don't yet have threads so use relaxed ordering.
-        PROCESSED_TEXELS.store(0, Ordering::Relaxed);
+        //PROCESSED_TEXELS.store(0, Ordering::Relaxed);
         {
             let funcs = Arc::new(ArrayQueue::new(self.n_threads));
             for _ in 0..self.n_threads {
@@ -180,7 +177,7 @@ impl<D: PipelineDelegate> Pipeline<D> {
                 Some(delegate) => Some(delegate.on_start_render_pass(self.cur_pass, total as _)),
                 None => None
             }.map(Arc::new);
-            let intty = atty::is(atty::Stream::Stdout);
+            /*let intty = atty::is(atty::Stream::Stdout);
             let _guard = match intty {
                 true => {
                     let guard = DisableStdoutLogger::new();
@@ -188,7 +185,7 @@ impl<D: PipelineDelegate> Pipeline<D> {
                     Some(guard)
                 }
                 false => None,
-            };
+            };*/
             for y in 0..self.swap_chain.height() {
                 for x in 0..self.swap_chain.width() {
                     let task = Task {
@@ -196,7 +193,7 @@ impl<D: PipelineDelegate> Pipeline<D> {
                         funcs: funcs.clone(),
                         delegate: pass.clone()
                     };
-                    pool.send(&manager, move |_| task.run(x, y, total as _, intty));
+                    pool.send(&manager, move |_| task.run(x, y));
                 }
             }
             for (pos, texel) in pool.reduce().map(|v| v.unwrap()) {
@@ -204,9 +201,9 @@ impl<D: PipelineDelegate> Pipeline<D> {
                     warn!(?pos, expected_format = ?self.swap_chain.format(), "Ignored texel due to format mismatch");
                 }
             }
-            if intty {
+            /*if intty {
                 println!()
-            }
+            }*/
         }
         self.cur_pass += 1;
         if let Some(prev) = previous {
