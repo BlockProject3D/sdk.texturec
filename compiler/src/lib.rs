@@ -42,6 +42,8 @@ mod filter;
 const DEFAULT_WIDTH: u32 = 256;
 const DEFAULT_HEIGHT: u32 = 256;
 
+pub use pipeline::ProgressDelegate as Delegate;
+
 #[derive(Debug, Error)]
 pub enum AddFilterError<'a> {
     #[error("parameter error: {0}")]
@@ -69,16 +71,28 @@ pub struct Config<'a> {
     pub output: &'a std::path::Path
 }
 
-pub struct Compiler<'a> {
+pub struct Compiler<'a, D> {
     config: Config<'a>,
-    filters: Vec<filter::DynamicFilter>
+    filters: Vec<filter::DynamicFilter>,
+    delegate: Option<D>
 }
 
-impl<'a> Compiler<'a> {
-    pub fn new(config: Config<'a>) -> Compiler<'a> {
+impl<'a> Compiler<'a, pipeline::NullDelegate> {
+    pub fn new(config: Config<'a>) -> Compiler<'a, pipeline::NullDelegate> {
         Compiler {
             config,
-            filters: Vec::new()
+            filters: Vec::new(),
+            delegate: None
+        }
+    }
+}
+
+impl<'a, D: Delegate> Compiler<'a, D> {
+    pub fn with_delegate(config: Config<'a>, delegate: D) -> Compiler<'a, D> {
+        Compiler {
+            config,
+            filters: Vec::new(),
+            delegate: Some(delegate)
         }
     }
 
@@ -120,7 +134,7 @@ impl<'a> Compiler<'a> {
         );
         debug!(width = chain.width(), height = chain.height(), format = ?chain.format(), "Created new swap chain");
         let pass_count = self.filters.len();
-        let mut pipeline = pipeline::Pipeline::new(self.filters, chain, self.config.n_threads);
+        let mut pipeline = pipeline::Pipeline::new(self.filters, chain, self.config.n_threads, self.delegate);
         for _ in 0..pass_count {
             pipeline.next_pass().map_err(Error::FrameBuffer)?;
         }

@@ -47,14 +47,29 @@ fn print_progress(progress: f64) {
     lock.flush().unwrap();
 }
 
-struct Task {
-    format: Format,
-    width: u32,
-    height: u32,
-    funcs: Arc<ArrayQueue<DynamicFunction>>,
+pub trait ProgressDelegate: Send + Sync + 'static {
+    fn on_start_render_pass(&self, render_pass: usize, total_texels: usize);
+    fn on_end_render_pass(&self);
+    fn on_start_texel(&self, x: u32, y: u32);
+    fn on_end_texel(&self);
 }
 
-impl Task {
+pub struct NullDelegate;
+
+impl ProgressDelegate for NullDelegate {
+    fn on_start_render_pass(&self, _: usize, _: usize) {}
+    fn on_end_render_pass(&self) {}
+    fn on_start_texel(&self, _: u32, _: u32) {}
+    fn on_end_texel(&self) {}
+}
+
+struct Task<D> {
+    funcs: Arc<ArrayQueue<DynamicFunction>>,
+    delegate: Option<Arc<D>>,
+    render_pass: usize
+}
+
+impl<D: ProgressDelegate> Task<D> {
     /*fn init_lua_engine(self) -> rlua::Result<(Arc<ArrayQueue<LuaEngine>>, LuaEngine)> {
         match self.vms.pop() {
             Some(v) => Ok((self.vms, v)),
@@ -85,12 +100,18 @@ impl Task {
         }
     }*/
 
-    #[instrument(level = "trace", skip(self, total, intty))]
+    #[instrument(level = "trace", fields(render_pass=self.render_pass), skip(self, total, intty))]
     fn run(self, x: u32, y: u32, total: f64, intty: bool) -> (Point2<u32>, Texel) {
+        if let Some(delegate) = &self.delegate {
+            delegate.on_start_texel(x, y);
+        }
         let func = self.funcs.pop().unwrap();
         let pos = Point2::new(x, y);
         let texel = func.apply(pos);
         self.funcs.push(func).ok().unwrap();
+        if let Some(delegate) = &self.delegate {
+            delegate.on_end_texel();
+        }
         let current = PROCESSED_TEXELS.fetch_add(1, Ordering::Relaxed);
         if intty && current % DISPLAY_INTERVAL == 0 {
             print_progress((current as f64 / total as f64) * 100.0);
@@ -99,26 +120,24 @@ impl Task {
     }
 }
 
-pub struct Pipeline {
+pub struct Pipeline<D> {
     filters: Vec<DynamicFilter>,
     cur_pass: usize,
     swap_chain: SwapChain,
     n_threads: usize,
+    delegate: Option<Arc<D>>
 }
 
 static PROCESSED_TEXELS: AtomicU32 = AtomicU32::new(0);
 
-impl Pipeline {
-    pub fn new(
-        filters: Vec<DynamicFilter>,
-        swap_chain: SwapChain,
-        n_threads: usize,
-    ) -> Pipeline {
+impl<D: ProgressDelegate> Pipeline<D> {
+    pub fn new(filters: Vec<DynamicFilter>, swap_chain: SwapChain, n_threads: usize, delegate: Option<D>) -> Pipeline<D> {
         Pipeline {
             filters,
             cur_pass: 0,
             swap_chain,
             n_threads,
+            delegate: delegate.map(Arc::new)
         }
     }
 
@@ -138,8 +157,11 @@ impl Pipeline {
         info!(max_threads = self.n_threads, "Initialized thread pool");
         //At this point we don't yet have threads so use relaxed ordering.
         PROCESSED_TEXELS.store(0, Ordering::Relaxed);
+        let total = self.swap_chain.height() * self.swap_chain.width();
+        if let Some(delegate) = &self.delegate {
+            delegate.on_start_render_pass(self.cur_pass, total as _);
+        }
         {
-            let total = self.swap_chain.height() * self.swap_chain.width();
             let funcs = Arc::new(ArrayQueue::new(self.n_threads));
             for _ in 0..self.n_threads {
                 funcs.push(self.filters[self.cur_pass].new_function(FrameBuffer {
@@ -149,6 +171,7 @@ impl Pipeline {
                     format: self.swap_chain.format()
                 })?).ok().unwrap();
             }
+            info!(description=self.filters[self.cur_pass].describe(), "Initialized filter");
             let intty = atty::is(atty::Stream::Stdout);
             let _guard = match intty {
                 true => {
@@ -161,10 +184,9 @@ impl Pipeline {
             for y in 0..self.swap_chain.height() {
                 for x in 0..self.swap_chain.width() {
                     let task = Task {
-                        format: self.swap_chain.format(),
-                        width: self.swap_chain.width(),
-                        height: self.swap_chain.height(),
+                        render_pass: self.cur_pass,
                         funcs: funcs.clone(),
+                        delegate: self.delegate.clone()
                     };
                     pool.send(&manager, move |_| task.run(x, y, total as _, intty));
                 }
@@ -177,6 +199,9 @@ impl Pipeline {
             if intty {
                 println!()
             }
+        }
+        if let Some(delegate) = &self.delegate {
+            delegate.on_end_render_pass();
         }
         self.cur_pass += 1;
         if let Some(prev) = previous {

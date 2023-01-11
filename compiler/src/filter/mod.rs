@@ -30,7 +30,7 @@ use std::sync::Arc;
 use nalgebra::Point2;
 use thiserror::Error;
 use crate::params::ParameterMap;
-use crate::texture::{Format, OutputTexture, Texel, Texture};
+use crate::texture::{Format, OutputTexture, Texel};
 
 #[derive(Error, Debug)]
 pub enum FrameBufferError {
@@ -83,6 +83,9 @@ pub trait Filter {
     /// If this filter has no ideal texture format then return None.
     fn get_texture_format(&self) -> Option<Format>;
 
+    /// Returns the name of this filter.
+    fn describe(&self) -> &str;
+
     fn new_function(&self, frame_buffer: FrameBuffer) -> Result<Self::Function, FrameBufferError>;
 }
 
@@ -112,6 +115,15 @@ macro_rules! impl_filter {
                 match self {
                     $(
                         Self::$name(v) => v.get_texture_format(),
+                    )*
+                    _ => std::unreachable!()
+                }
+            }
+
+            fn describe(&self) -> &str {
+                match self {
+                    $(
+                        Self::$name(v) => v.describe(),
                     )*
                     _ => std::unreachable!()
                 }

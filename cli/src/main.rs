@@ -31,31 +31,51 @@ use clap::{Arg, ArgAction, Command, value_parser};
 use std::path::Path;
 use std::path::PathBuf;
 use bp3d_texturec::{Compiler, Config};
-//use log::{info, LevelFilter};
-//use crate::swapchain::SwapChain;
-//use tracing::{debug, info};
-//use crate::params::ParameterMap;
 use bp3d_texturec::texture::Format;
 
 const PROG_NAME: &str = env!("CARGO_PKG_NAME");
 const PROG_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-macro_rules! etry {
-    (($msg: literal $status: literal) => $code: expr) => {
-        match $code {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("{}: {}", $msg, e);
-                return $status;
+struct Filter<'a> {
+    name: &'a str,
+    params: Option<Vec<(&'a str, &'a OsStr)>>
+}
+
+impl<'a> Filter<'a> {
+    pub fn add_param(&mut self, name: &'a str, value: &'a OsStr) {
+        self.params.get_or_insert_with(Vec::new).push((name, value));
+    }
+}
+
+fn parse_filters<'a>(filters: impl Iterator<Item = &'a str>, params: Option<impl Iterator<Item = (&'a str, &'a OsStr)>>) -> Vec<Filter<'a>> {
+    let mut filters: Vec<Filter> = filters.map(|name| Filter { name, params: None }).collect();
+    if let Some(params) = params {
+        for (k, v) in params {
+            match k.find(".") {
+                Some(idx) => {
+                    let filter_id: usize = k[..idx].parse().unwrap_or(0);
+                    let name = &k[idx + 1..];
+                    if filter_id >= filters.len() {
+                        eprintln!("Filter index {} is out of range", filter_id);
+                        std::process::exit(1);
+                    }
+                    filters[filter_id].add_param(name, v);
+                },
+                None => {
+                    for filter in &mut filters {
+                        filter.add_param(k, v);
+                    }
+                }
             }
         }
-    };
+    }
+    filters
 }
 
 fn main() {
     let matches = Command::new(PROG_NAME)
         .author("BlockProject 3D")
-        .about("BlockProject 3D SDK - Shader Compiler")
+        .about("BlockProject 3D SDK - Texture Compiler")
         .version(PROG_VERSION)
         .args([
             Arg::new("debug").short('d').long("debug")
@@ -63,7 +83,7 @@ fn main() {
             Arg::new("output").short('o').long("output").num_args(1)
                 .value_parser(value_parser!(PathBuf)).help("Output texture file name"),
             Arg::new("threads").short('n').long("threads").num_args(1)
-                .help("Specify the maximum number of threads to use when processing shaders"),
+                .help("Specify the maximum number of threads to use when processing filters"),
             Arg::new("format").short('f').long("format")
                 .value_parser(["l8", "la8", "rgba8", "rgba32", "f32"]).num_args(1)
                 .help("Override output texture format"),
@@ -71,11 +91,11 @@ fn main() {
                 .num_args(1).help("Override output texture width"),
             Arg::new("height").long("height").value_parser(value_parser!(u32))
                 .num_args(1).help("Override output texture height"),
-            Arg::new("filter").long("filter").short('t').num_args(1)
+            Arg::new("filter").long("filter").short('F').num_args(1)
                 .action(ArgAction::Append).help("Adds a filter to apply").required(true),
             Arg::new("parameter").short('p').long("parameter").action(ArgAction::Append)
-                .num_args(2).value_parser(value_parser!(OsString))
-                .help("Specify a template parameter using the syntax <parameter name> <parameter value>")
+                .value_names(["name", "value"]).num_args(2).value_parser(value_parser!(OsString))
+                .help("Specify a template parameter")
         ]).get_matches();
     let output: &Path = matches.get_one::<PathBuf>("output").map(|v| &**v).unwrap_or(Path::new("a.out.bpx"));
     let filters = matches.get_many::<String>("filter").unwrap().map(|v| &**v);
@@ -102,7 +122,7 @@ fn main() {
     let height: Option<u32> = matches.get_one("height").map(|v| *v);
     let n_threads: usize = matches.get_one("threads").map(|v| *v).unwrap_or(1);
     bp3d_tracing::setup!("bp3d-sdk");
-    let compiler = Compiler::new(Config {
+    let mut compiler = Compiler::new(Config {
         n_threads,
         width,
         height,
@@ -110,7 +130,16 @@ fn main() {
         debug: matches.contains_id("debug"),
         output
     });
-
+    for filter in parse_filters(filters, params) {
+        if let Err(e) = compiler.add_filter(filter.name, filter.params.map(|v| v.into_iter())) {
+            eprintln!("Failed to add filter: {}", e);
+            std::process::exit(1);
+        }
+    }
+    if let Err(e) = compiler.run() {
+        eprintln!("Failed to run texture compiler: {}", e);
+        std::process::exit(1);
+    }
 }
 
 /*fn run() -> i32 {
