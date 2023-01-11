@@ -84,8 +84,7 @@ impl Function for Func {
             true => self.convert(unsafe { self.base_texture.get(pos).unwrap_unchecked() }),
             false => {
                 //Unfortunately nalgebra has removed to_vector long ago, so implement a workaround.
-                let pos = Vec2f::new(pos.cast::<f64>().x, pos.cast::<f64>().y)
-                    .component_div(&self.size);
+                let pos = pos.cast::<f64>().coords.component_div(&self.size);
                 let texel = self.base_texture.sample(pos).unwrap();
                 self.convert(texel)
             }
