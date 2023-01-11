@@ -34,7 +34,7 @@ use nalgebra::Point2;
 //use crate::template::Format as TextureFormat;
 
 /// Enum for supported texture formats.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Format {
     /// 8 bits greyscale (8bpp).
     L8,
@@ -66,7 +66,7 @@ impl Format {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum Texel {
     L8(u8),
     LA8(u8, u8),
@@ -76,6 +76,16 @@ pub enum Texel {
 }
 
 impl Texel {
+    pub fn format(&self) -> Format {
+        match self {
+            Texel::L8(_) => Format::L8,
+            Texel::LA8(_, _) => Format::LA8,
+            Texel::RGBA8(_, _, _, _) => Format::RGBA8,
+            Texel::F32(_) => Format::F32,
+            Texel::RGBAF32(_, _, _, _) => Format::RGBAF32
+        }
+    }
+
     /// Converts this texel to RGBA data (None when texel format is not compatible).
     pub fn rgba(&self) -> Option<(u8, u8, u8, u8)> {
         match self {
