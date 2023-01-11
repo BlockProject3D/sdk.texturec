@@ -46,7 +46,7 @@ impl Function for Func {
         let mut w = 0.0;
         for i in -self.ksize..self.ksize {
             for j in -self.ksize..self.ksize {
-                let q = (pos.cast::<isize>() + Vec2::from([j, i]).cast()).clamp(&Point2::new(0, 0), &self.size.cast());
+                let q = (pos.cast::<isize>() + Vec2::from([j, i])).clamp(&Point2::new(0, 0), &self.size.cast());
                 let norm = (pos.cast() - q).cast::<f64>().norm_squared();
                 let kernel = norm.gaussian2d(self.sigma);
                 //SAFETY: This is never None because q is clamped between 0 and the size of the
