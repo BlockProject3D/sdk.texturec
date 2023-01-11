@@ -27,7 +27,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use crate::math::{Vec2f, Vec3f, Vec4f};
-use crate::texture::{ImageTexture, Texture};
+use crate::texture::ImageTexture;
 use image::io::Reader;
 use std::collections::HashMap;
 use std::ffi::OsStr;
