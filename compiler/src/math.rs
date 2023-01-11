@@ -28,6 +28,10 @@
 
 use nalgebra as na;
 
-pub type Vec2f = na::Vector2<f64>;
-pub type Vec3f = na::Vector3<f64>;
-pub type Vec4f = na::Vector4<f64>;
+pub use na::Vector2 as Vec2;
+pub use na::Vector3 as Vec3;
+pub use na::Vector4 as Vec4;
+
+pub type Vec2f = Vec2<f64>;
+pub type Vec3f = Vec3<f64>;
+pub type Vec4f = Vec4<f64>;
