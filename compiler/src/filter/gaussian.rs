@@ -49,9 +49,9 @@ impl Function for Func {
                 let q = (pos.cast::<isize>() + Vec2::from([j, i]).cast()).clamp(&Point2::new(0, 0), &self.size.cast());
                 let norm = (pos.cast() - q).cast::<f64>().norm_squared();
                 let kernel = norm.gaussian2d(self.sigma);
-                //SAFETY: This is never None because the size of the frame buffer is checked in
-                // new_function. The format is also checked to always be compatible with rgba.
-                let (r, g, b, _) = unsafe { self.buffer.get(pos).unwrap_unchecked().rgba().unwrap_unchecked() };
+                //SAFETY: This is never None because q is clamped between 0 and the size of the
+                // frame buffer - 1. The format is also checked to always be compatible with rgba.
+                let (r, g, b, _) = unsafe { self.buffer.get(q.map(|v| v as u32)).unwrap_unchecked().rgba().unwrap_unchecked() };
                 gsigma += Vec3::new(r, g, b).cast() * kernel;
                 w += kernel;
             }
@@ -95,7 +95,7 @@ impl Filter for Gaussian {
         }
         Ok(Func {
             buffer: previous,
-            size: Point2::new(frame_buffer.width, frame_buffer.height),
+            size: Point2::new(frame_buffer.width - 1, frame_buffer.height - 1),
             ksize: self.ksize as _,
             sigma: self.sigma
         })
