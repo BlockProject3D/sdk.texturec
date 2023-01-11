@@ -93,11 +93,12 @@ fn main() {
         .about("BlockProject 3D SDK - Texture Compiler")
         .version(PROG_VERSION)
         .args([
-            Arg::new("debug").short('d').long("debug")
+            Arg::new("debug").short('d').long("debug").num_args(0)
                 .help("Enable debug PNG output"),
             Arg::new("output").short('o').long("output").num_args(1)
                 .value_parser(value_parser!(PathBuf)).help("Output texture file name"),
             Arg::new("threads").short('n').long("threads").num_args(1)
+                .value_parser(value_parser!(usize))
                 .help("Specify the maximum number of threads to use when processing filters"),
             Arg::new("format").short('f').long("format")
                 .value_parser(["l8", "la8", "rgba8", "rgba32", "f32"]).num_args(1)
