@@ -107,7 +107,6 @@ macro_rules! impl_filter {
                     $(
                         Self::$name(v) => v.get_texture_size(),
                     )*
-                    _ => std::unreachable!()
                 }
             }
 
@@ -116,7 +115,6 @@ macro_rules! impl_filter {
                     $(
                         Self::$name(v) => v.get_texture_format(),
                     )*
-                    _ => std::unreachable!()
                 }
             }
 
@@ -125,16 +123,14 @@ macro_rules! impl_filter {
                     $(
                         Self::$name(v) => v.describe(),
                     )*
-                    _ => std::unreachable!()
                 }
             }
 
             fn new_function(&self, frame_buffer: FrameBuffer) -> Result<Self::Function, FrameBufferError> {
                 match self {
                     $(
-                        Self::$name(v) => v.new_function(frame_buffer),
+                        Self::$name(v) => v.new_function(frame_buffer).map(Self::Function::$name),
                     )*
-                    _ => std::unreachable!()
                 }
             }
         }
@@ -149,7 +145,6 @@ macro_rules! impl_function {
                     $(
                         Self::$name(v) => v.apply(pos),
                     )*
-                    _ => std::unreachable!()
                 }
             }
         }

@@ -36,14 +36,14 @@ fn snake_case_to_pascal_case(mut name: &str) -> String {
     let mut res = String::new();
     while let Some(index) = name.find('_') {
         if name.len() > 1 {
-            res += &(name[0..1].to_uppercase() + &name[1..index] + "test");
+            res += &(name[0..1].to_uppercase() + &name[1..index]);
         }
         if index + 1 < name.len() {
             name = &name[index + 1..];
         }
     }
     if name.len() > 1 {
-        res += &(name[0..1].to_uppercase() + &name[1..] + "test");
+        res += &(name[0..1].to_uppercase() + &name[1..]);
     }
     res
 }
@@ -69,8 +69,9 @@ fn list_filters() -> io::Result<Vec<String>> {
 }
 
 fn write_file(filters: Vec<String>, out_file: &Path) -> io::Result<()> {
+    let path = std::fs::canonicalize(Path::new("src/filter")).expect("Failed to get absolute path to source directory");
     let mut file = BufWriter::new(File::create(out_file)?);
-    let module_imports: Vec<String> = filters.iter().map(|v| format!("mod {};", v)).collect();
+    let module_imports: Vec<String> = filters.iter().map(|v| format!("#[path=\"{}.rs\"] mod {};", path.join(v).to_string_lossy(), v)).collect();
     let variants = filters.iter()
         .map(|v| snake_case_to_pascal_case(v))
         .collect::<Vec<String>>().join(",");
@@ -82,7 +83,7 @@ fn write_file(filters: Vec<String>, out_file: &Path) -> io::Result<()> {
         .map(|(module, obj)| format!("{}(<{}::{} as crate::filter::Filter>::Function),", obj, module, obj)).collect();
     let variants_from_name: Vec<String> = filters.iter()
         .map(|v| (v, snake_case_to_pascal_case(v)))
-        .map(|(module, obj)| format!("\"{}\" => Some(<{}::{} as crate::filter::New>::new(params)),", module, module, obj)).collect();
+        .map(|(module, obj)| format!("\"{}\" => Some(<{}::{} as crate::filter::New>::new(params).map(DynamicFilter::{})),", module, module, obj, obj)).collect();
     writeln!(file, "{}", module_imports.join("\n"))?;
     writeln!(file, "pub enum DynamicFilter {{")?;
     writeln!(file, "    {}", variants_filter.join("\n"))?;
