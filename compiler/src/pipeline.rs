@@ -165,11 +165,6 @@ impl<D: PipelineDelegate> Pipeline<D> {
         //At this point we don't yet have threads so use relaxed ordering.
         PROCESSED_TEXELS.store(0, Ordering::Relaxed);
         {
-            let total = self.swap_chain.height() * self.swap_chain.width();
-            let pass = match &mut self.delegate {
-                Some(delegate) => Some(delegate.on_start_render_pass(self.cur_pass, total as _)),
-                None => None
-            }.map(Arc::new);
             let funcs = Arc::new(ArrayQueue::new(self.n_threads));
             for _ in 0..self.n_threads {
                 funcs.push(self.filters[self.cur_pass].new_function(FrameBuffer {
@@ -180,6 +175,11 @@ impl<D: PipelineDelegate> Pipeline<D> {
                 })?).ok().unwrap();
             }
             info!(description=self.filters[self.cur_pass].describe(), "Initialized filter");
+            let total = self.swap_chain.height() * self.swap_chain.width();
+            let pass = match &mut self.delegate {
+                Some(delegate) => Some(delegate.on_start_render_pass(self.cur_pass, total as _)),
+                None => None
+            }.map(Arc::new);
             let intty = atty::is(atty::Stream::Stdout);
             let _guard = match intty {
                 true => {

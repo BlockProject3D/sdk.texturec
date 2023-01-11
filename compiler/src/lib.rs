@@ -43,6 +43,7 @@ const DEFAULT_WIDTH: u32 = 256;
 const DEFAULT_HEIGHT: u32 = 256;
 
 pub use pipeline::PipelineDelegate as Delegate;
+pub use pipeline::PassDelegate as PassDelegate;
 
 #[derive(Debug, Error)]
 pub enum AddFilterError<'a> {
