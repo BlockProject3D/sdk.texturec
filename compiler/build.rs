@@ -83,7 +83,7 @@ fn write_file(filters: Vec<String>, out_file: &Path) -> io::Result<()> {
         .map(|(module, obj)| format!("{}(<{}::{} as crate::filter::Filter>::Function),", obj, module, obj)).collect();
     let variants_from_name: Vec<String> = filters.iter()
         .map(|v| (v, snake_case_to_pascal_case(v)))
-        .map(|(module, obj)| format!("\"{}\" => Some(<{}::{} as crate::filter::New>::new(params).map(DynamicFilter::{})),", module, module, obj, obj)).collect();
+        .map(|(module, obj)| format!("\"{}\" => Some(<{}::{} as crate::filter::New>::new(params).map(DynamicFilter::{}))", module, module, obj, obj)).collect();
     writeln!(file, "{}", module_imports.join("\n"))?;
     writeln!(file, "pub enum DynamicFilter {{")?;
     writeln!(file, "    {}", variants_filter.join("\n"))?;
