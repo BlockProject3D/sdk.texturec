@@ -47,20 +47,27 @@ fn print_progress(progress: f64) {
     lock.flush().unwrap();
 }
 
-pub trait ProgressDelegate: Send + Sync + 'static {
-    fn on_start_render_pass(&self, render_pass: usize, total_texels: usize);
-    fn on_end_render_pass(&self);
+pub trait PassDelegate: Send + Sync + 'static {
     fn on_start_texel(&self, x: u32, y: u32);
     fn on_end_texel(&self);
 }
 
-pub struct NullDelegate;
+pub trait PipelineDelegate {
+    type Pass: PassDelegate;
 
-impl ProgressDelegate for NullDelegate {
-    fn on_start_render_pass(&self, _: usize, _: usize) {}
-    fn on_end_render_pass(&self) {}
+    fn on_start_render_pass(&mut self, render_pass: usize, total_texels: usize) -> Self::Pass;
+}
+
+impl PassDelegate for () {
     fn on_start_texel(&self, _: u32, _: u32) {}
     fn on_end_texel(&self) {}
+}
+
+pub struct NullDelegate;
+
+impl PipelineDelegate for NullDelegate {
+    type Pass = ();
+    fn on_start_render_pass(&mut self, _: usize, _: usize) -> Self::Pass { () }
 }
 
 struct Task<D> {
@@ -69,7 +76,7 @@ struct Task<D> {
     render_pass: usize
 }
 
-impl<D: ProgressDelegate> Task<D> {
+impl<D: PassDelegate> Task<D> {
     /*fn init_lua_engine(self) -> rlua::Result<(Arc<ArrayQueue<LuaEngine>>, LuaEngine)> {
         match self.vms.pop() {
             Some(v) => Ok((self.vms, v)),
@@ -125,19 +132,19 @@ pub struct Pipeline<D> {
     cur_pass: usize,
     swap_chain: SwapChain,
     n_threads: usize,
-    delegate: Option<Arc<D>>
+    delegate: Option<D>
 }
 
 static PROCESSED_TEXELS: AtomicU32 = AtomicU32::new(0);
 
-impl<D: ProgressDelegate> Pipeline<D> {
+impl<D: PipelineDelegate> Pipeline<D> {
     pub fn new(filters: Vec<DynamicFilter>, swap_chain: SwapChain, n_threads: usize, delegate: Option<D>) -> Pipeline<D> {
         Pipeline {
             filters,
             cur_pass: 0,
             swap_chain,
             n_threads,
-            delegate: delegate.map(Arc::new)
+            delegate
         }
     }
 
@@ -157,11 +164,12 @@ impl<D: ProgressDelegate> Pipeline<D> {
         info!(max_threads = self.n_threads, "Initialized thread pool");
         //At this point we don't yet have threads so use relaxed ordering.
         PROCESSED_TEXELS.store(0, Ordering::Relaxed);
-        let total = self.swap_chain.height() * self.swap_chain.width();
-        if let Some(delegate) = &self.delegate {
-            delegate.on_start_render_pass(self.cur_pass, total as _);
-        }
         {
+            let total = self.swap_chain.height() * self.swap_chain.width();
+            let pass = match &mut self.delegate {
+                Some(delegate) => Some(delegate.on_start_render_pass(self.cur_pass, total as _)),
+                None => None
+            }.map(Arc::new);
             let funcs = Arc::new(ArrayQueue::new(self.n_threads));
             for _ in 0..self.n_threads {
                 funcs.push(self.filters[self.cur_pass].new_function(FrameBuffer {
@@ -186,7 +194,7 @@ impl<D: ProgressDelegate> Pipeline<D> {
                     let task = Task {
                         render_pass: self.cur_pass,
                         funcs: funcs.clone(),
-                        delegate: self.delegate.clone()
+                        delegate: pass.clone()
                     };
                     pool.send(&manager, move |_| task.run(x, y, total as _, intty));
                 }
@@ -199,9 +207,6 @@ impl<D: ProgressDelegate> Pipeline<D> {
             if intty {
                 println!()
             }
-        }
-        if let Some(delegate) = &self.delegate {
-            delegate.on_end_render_pass();
         }
         self.cur_pass += 1;
         if let Some(prev) = previous {

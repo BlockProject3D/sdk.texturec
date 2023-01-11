@@ -42,7 +42,7 @@ mod filter;
 const DEFAULT_WIDTH: u32 = 256;
 const DEFAULT_HEIGHT: u32 = 256;
 
-pub use pipeline::ProgressDelegate as Delegate;
+pub use pipeline::PipelineDelegate as Delegate;
 
 #[derive(Debug, Error)]
 pub enum AddFilterError<'a> {

@@ -26,6 +26,8 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+mod delegate;
+
 use std::ffi::{OsStr, OsString};
 use clap::{Arg, ArgAction, Command, value_parser};
 use std::path::Path;
