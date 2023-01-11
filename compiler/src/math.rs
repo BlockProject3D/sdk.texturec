@@ -35,3 +35,47 @@ pub use na::Vector4 as Vec4;
 pub type Vec2f = Vec2<f64>;
 pub type Vec3f = Vec3<f64>;
 pub type Vec4f = Vec4<f64>;
+
+pub trait Clamp {
+    fn clamp(&self, min: &Self, max: &Self) -> Self;
+}
+
+impl<T: Clone + PartialOrd, D: Clone + na::Dim, S: Clone + na::RawStorageMut<T, D, na::U1>> Clamp for na::Vector<T, D, S> {
+    fn clamp(&self, min: &Self, max: &Self) -> Self {
+        let mut new = self.clone();
+        for i in 0..self.data.shape().0.value() {
+            if new[i] < min[i] {
+                new[i] = min[i].clone();
+            } else if new[i] > max[i] {
+                new[i] = max[i].clone();
+            }
+        }
+        new
+    }
+}
+
+impl<T: na::Scalar + Clone + PartialOrd, const D: usize> Clamp for na::Point<T, D> {
+    fn clamp(&self, min: &Self, max: &Self) -> Self {
+        self.coords.clamp(&min.coords, &max.coords).into()
+    }
+}
+
+pub trait Gaussian2d {
+    fn gaussian2d(self, sigma: Self) -> Self;
+}
+
+impl Gaussian2d for f32 {
+    fn gaussian2d(self, sigma: Self) -> Self {
+        let term1 = 1.0 / 2.0 * std::f32::consts::PI * (sigma * sigma);
+        let term2 = (-(self / (2.0 * sigma * sigma))).exp();
+        term1 * term2
+    }
+}
+
+impl Gaussian2d for f64 {
+    fn gaussian2d(self, sigma: Self) -> Self {
+        let term1 = 1.0 / 2.0 * std::f64::consts::PI * (sigma * sigma);
+        let term2 = (-(self / (2.0 * sigma * sigma))).exp();
+        term1 * term2
+    }
+}
