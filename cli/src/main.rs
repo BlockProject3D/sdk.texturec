@@ -32,7 +32,7 @@ use std::ffi::{OsStr, OsString};
 use clap::{Arg, ArgAction, Command, value_parser};
 use std::path::Path;
 use std::path::PathBuf;
-use bp3d_texturec::{Compiler, Config};
+use bp3d_texturec::{Compiler, Config, Delegate};
 use bp3d_texturec::texture::Format;
 
 const PROG_NAME: &str = env!("CARGO_PKG_NAME");
@@ -72,6 +72,19 @@ fn parse_filters<'a>(filters: impl Iterator<Item = &'a str>, params: Option<impl
         }
     }
     filters
+}
+
+fn run<'a, D: Delegate>(mut compiler: Compiler<'a, D>, filters: Vec<Filter<'a>>) {
+    for filter in filters {
+        if let Err(e) = compiler.add_filter(filter.name, filter.params.map(|v| v.into_iter())) {
+            eprintln!("Failed to add filter: {}", e);
+            std::process::exit(1);
+        }
+    }
+    if let Err(e) = compiler.run() {
+        eprintln!("Failed to run texture compiler: {}", e);
+        std::process::exit(1);
+    }
 }
 
 fn main() {
@@ -124,24 +137,19 @@ fn main() {
     let height: Option<u32> = matches.get_one("height").map(|v| *v);
     let n_threads: usize = matches.get_one("threads").map(|v| *v).unwrap_or(1);
     bp3d_tracing::setup!("bp3d-sdk");
-    let mut compiler = Compiler::new(Config {
+    let config = Config {
         n_threads,
         width,
         height,
         format,
         debug: matches.contains_id("debug"),
         output
-    });
-    for filter in parse_filters(filters, params) {
-        if let Err(e) = compiler.add_filter(filter.name, filter.params.map(|v| v.into_iter())) {
-            eprintln!("Failed to add filter: {}", e);
-            std::process::exit(1);
-        }
-    }
-    if let Err(e) = compiler.run() {
-        eprintln!("Failed to run texture compiler: {}", e);
-        std::process::exit(1);
-    }
+    };
+    let filters = parse_filters(filters, params);
+    match atty::is(atty::Stream::Stdout) {
+        true => run(Compiler::with_delegate(config, delegate::TtyDelegate), filters),
+        false => run(Compiler::new(config), filters)
+    };
 }
 
 /*fn run() -> i32 {

@@ -9,3 +9,4 @@ edition = "2021"
 clap = "4.0.32"
 bp3d-texturec = { path = "../compiler" }
 bp3d-tracing = { path = "../../debug.tracing" }
+atty = "0.2.14"
