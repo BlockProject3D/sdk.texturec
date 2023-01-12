@@ -155,6 +155,13 @@ impl<'a> ParameterMap<'a> {
                 content.insert(k.into(), Parameter::Texture(Arc::new(ImageTexture::new(image))));
             } else {
                 let value = v.to_str().ok_or(Error::InvalidUtf8)?;
+                if value == "true" || value == "on" {
+                    content.insert(k, Parameter::Bool(true));
+                    continue;
+                } else if value == "false" || value == "off" {
+                    content.insert(k, Parameter::Bool(false));
+                    continue;
+                }
                 let p = value.parse().map(Parameter::Int)
                     .or_else(|_| value.parse().map(Parameter::Float))
                     .or_else(|_| {
