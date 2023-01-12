@@ -56,7 +56,9 @@ impl Function for Func {
     }
 }
 
-pub struct Greyscale;
+pub struct Greyscale {
+    alpha: bool
+}
 
 impl Filter for Greyscale {
     type Function = Func;
@@ -66,7 +68,11 @@ impl Filter for Greyscale {
     }
 
     fn get_texture_format(&self) -> Option<Format> {
-        Some(Format::L8)
+        if self.alpha {
+            Some(Format::LA8)
+        } else {
+            Some(Format::L8)
+        }
     }
 
     fn describe(&self) -> &str {
@@ -91,7 +97,9 @@ impl Filter for Greyscale {
 }
 
 impl New for Greyscale {
-    fn new(_: &ParameterMap) -> Result<Self, FilterError> {
-        Ok(Greyscale)
+    fn new(params: &ParameterMap) -> Result<Self, FilterError> {
+        let alpha = params.get("alpha").map(|v| v.as_bool()
+            .ok_or(FilterError::InvalidParameter("alpha"))).transpose()?.unwrap_or(false);
+        Ok(Greyscale { alpha })
     }
 }
