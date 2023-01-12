@@ -161,6 +161,7 @@ impl<D: PipelineDelegate> Pipeline<D> {
             //Operate a change of format for the render target
             if format != self.swap_chain.format() {
                 let swap_chain = SwapChain::new(self.swap_chain.width(), self.swap_chain.height(), format);
+                info!(width=swap_chain.width(), height=swap_chain.height(), format=?swap_chain.format(), "Replaced swap-chain to accommodate filter requirements");
                 self.swap_chain = swap_chain;
                 render_target = self.swap_chain.next();
             }
