@@ -155,6 +155,16 @@ impl<D: PipelineDelegate> Pipeline<D> {
         } else {
             Some(self.swap_chain.next())
         }.map(Arc::new);
+        let filter = &self.filters[self.cur_pass];
+        if filter.get_texture_format().is_some() {
+            let format = unsafe { filter.get_texture_format().unwrap_unchecked() };
+            //Operate a change of format for the render target
+            if format != self.swap_chain.format() {
+                let swap_chain = SwapChain::new(self.swap_chain.width(), self.swap_chain.height(), format);
+                self.swap_chain = swap_chain;
+                render_target = self.swap_chain.next();
+            }
+        }
         let mut pool: ThreadPool<UnscopedThreadManager, (Point2<u32>, Texel)> =
             ThreadPool::new(self.n_threads);
         let manager = UnscopedThreadManager::new();
@@ -164,14 +174,14 @@ impl<D: PipelineDelegate> Pipeline<D> {
         {
             let funcs = Arc::new(ArrayQueue::new(self.n_threads));
             for _ in 0..self.n_threads {
-                funcs.push(self.filters[self.cur_pass].new_function(FrameBuffer {
+                funcs.push(filter.new_function(FrameBuffer {
                     previous: previous.clone(),
                     width: self.swap_chain.width(),
                     height: self.swap_chain.height(),
                     format: self.swap_chain.format()
                 })?).ok().unwrap();
             }
-            info!(description=self.filters[self.cur_pass].describe(), "Initialized filter");
+            info!(description=filter.describe(), "Initialized filter");
             let total = self.swap_chain.height() * self.swap_chain.width();
             let pass = match &mut self.delegate {
                 Some(delegate) => Some(delegate.on_start_render_pass(self.cur_pass, total as _)),
