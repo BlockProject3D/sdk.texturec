@@ -76,7 +76,11 @@ impl Filter for Greyscale {
     }
 
     fn describe(&self) -> &str {
-        "Greyscale"
+        if self.alpha {
+            "𝛂Greyscale"
+        } else {
+            "Greyscale"
+        }
     }
 
     fn new_function(&self, frame_buffer: FrameBuffer) -> Result<Self::Function, FrameBufferError> {

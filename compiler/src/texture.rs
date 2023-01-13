@@ -226,7 +226,7 @@ impl OutputTexture {
             }
             (Format::LA8, Texel::LA8(l, a)) => {
                 self.data[offset as usize] = l;
-                self.data[offset as usize] = a;
+                self.data[(offset + 1) as usize] = a;
                 true
             }
             (Format::RGBA8, Texel::RGBA8(r, g, b, a)) => {
