@@ -14,17 +14,19 @@ categories = []
 
 [dependencies]
 image = "0.24.1"
-bp3d-lua = { path = "../../tools.lua", features = ["vector", "math"] }
-toml = "0.5.8"
+#bp3d-lua = { path = "../../tools.lua", features = ["vector", "math"] }
+toml = "0.6.0"
 serde = { version = "1.0.136", features = ["derive"] }
 bp3d-threads = "1.1.0"
 thiserror = "1.0.30"
-nalgebra = "0.31.4"
+nalgebra = { version = "0.32.1", features = [ "rand-no-std" ] }
+rand = "0.8.5"
+noise = "0.8.2"
 #os_str_bytes = "6.0.0"
 #bstr = "0.2.17"
 tracing = "0.1.33"
 #bp3d-tracing = { path = "../../debug.tracing" }
 byteorder = "1.4.3"
-rlua = "0.19.1"
+#rlua = "0.19.1"
 crossbeam = "0.8.1"
 #atty = "0.2.14"
