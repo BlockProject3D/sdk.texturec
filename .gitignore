@@ -15,3 +15,6 @@ versionfile.txt
 .DS_Store
 .AppleDouble
 .LSOverride
+
+# Output generated file
+debug.png
